@@ -1,0 +1,146 @@
+# Loads default set of integrations. Do not remove.
+default_config:
+
+logger:
+  default: warning
+  logs:
+    custom_components.marstek_cloud: debug
+    custom_components.renson_test: debug
+    custom_components.marstek_local_api: debug
+
+# Text to speech
+tts:
+  - platform: google_translate
+
+automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml
+
+http:
+  use_x_forwarded_for: true
+  trusted_proxies:
+    - 172.18.0.2      # my swag container
+    - 192.168.0.1     # if my router is seen as the source
+
+google_assistant:
+  project_id: home-assistant-dc320
+  service_account: !include SERVICE_ACCOUNT.json
+  report_state: true
+
+template:
+  - sensor:
+        
+        # =========================
+        # Sensors for Easee charging
+        # =========================
+        
+      - name: Easee Charging Mode Readonly
+        state: "{{ states('input_select.easee_charging_mode') }}"
+        icon: mdi:ev-station
+
+      - name: Easee Dynamic Current Readonly
+        state: "{{ states('input_number.easee_dynamic_current') | int }}"
+        unit_of_measurement: "A"
+        icon: mdi:current-ac
+
+# =========================
+# Helpers for Easee charging
+# =========================
+input_number:
+  easee_dynamic_current:
+    name: Easee Dynamic Current
+    min: 0
+    max: 32
+    step: 1
+    initial: 6
+    unit_of_measurement: A
+    icon: mdi:current-ac
+
+input_select:
+  easee_charging_mode:
+    name: Easee Charging Mode
+    options:
+      - Full speed (schedule)
+      - Full speed (now)
+      - Solar surplus
+      - Solar only
+    icon: mdi:ev-station
+
+# =========================
+# Scripts for Easee charging
+# =========================
+script:
+  easee_mode_full_speed_schedule:
+    alias: Easee Full Speed (schedule)
+    sequence:
+      - service: easee.action_command
+        data:
+          device_id: b6930861fd4fcd8ce162a7643da311f5
+          action: stop
+      - service: easee.set_circuit_dynamic_limit
+        data:
+          device_id: b6930861fd4fcd8ce162a7643da311f5
+          current_p1: 32
+          time_to_live: 0
+      - service: input_select.select_option
+        data:
+          entity_id: input_select.easee_charging_mode
+          option: "Full speed (schedule)"
+
+  easee_mode_full_speed_now:
+    alias: Easee Full Speed (now)
+    sequence:
+      - service: easee.set_circuit_dynamic_limit
+        data:
+          device_id: b6930861fd4fcd8ce162a7643da311f5
+          current_p1: 32
+          time_to_live: 0
+      - service: button.press
+        target:
+          entity_id: button.easee_charger_override_schedule
+      - service: input_select.select_option
+        data:
+          entity_id: input_select.easee_charging_mode
+          option: "Full speed (now)"
+
+  easee_mode_solar_surplus:
+    alias: Easee Solar Surplus
+    sequence:
+      - service: easee.action_command
+        data:
+          device_id: b6930861fd4fcd8ce162a7643da311f5
+          action: stop
+      - service: input_number.set_value
+        data:
+          entity_id: input_number.easee_dynamic_current
+          value: 6
+      - service: easee.set_circuit_dynamic_limit
+        data:
+          device_id: b6930861fd4fcd8ce162a7643da311f5
+          current_p1: 6
+          time_to_live: 0
+      - service: input_select.select_option
+        data:
+          entity_id: input_select.easee_charging_mode
+          option: "Solar surplus"
+
+  easee_mode_solar_only:
+    alias: Easee Solar Only
+    sequence:
+      - service: easee.action_command
+        data:
+          device_id: b6930861fd4fcd8ce162a7643da311f5
+          action: stop
+      - service: input_number.set_value
+        data:
+          entity_id: input_number.easee_dynamic_current
+          value: 0
+      - service: easee.set_circuit_dynamic_limit
+        data:
+          device_id: b6930861fd4fcd8ce162a7643da311f5
+          current_p1: 0
+          time_to_live: 0
+      - service: input_select.select_option
+        data:
+          entity_id: input_select.easee_charging_mode
+          option: "Solar only"

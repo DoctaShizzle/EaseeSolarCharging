@@ -1,0 +1,445 @@
+[
+	{
+		"id": "589563619b7481ee",
+		"type": "tab",
+		"label": "Energy",
+		"disabled": false,
+		"info": "",
+		"env": []
+	},
+	{
+		"id": "0fc0078c1bd26fbc",
+		"type": "inject",
+		"z": "589563619b7481ee",
+		"name": "Every 30s",
+		"props": [],
+		"repeat": "30",
+		"once": true,
+		"onceDelay": "5",
+		"topic": "",
+		"x": 230,
+		"y": 760,
+		"wires": [
+			[
+				"17e7aaca4f37ca9f"
+			]
+		]
+	},
+	{
+		"id": "17e7aaca4f37ca9f",
+		"type": "api-current-state",
+		"z": "589563619b7481ee",
+		"name": "Get Easee mode",
+		"server": "5de24933a87c3a7c",
+		"version": 3,
+		"outputs": 1,
+		"halt_if": "",
+		"halt_if_type": "str",
+		"entity_id": "input_select.easee_charging_mode",
+		"state_type": "str",
+		"blockInputOverrides": false,
+		"outputProperties": [
+			{
+				"property": "mode",
+				"propertyType": "msg",
+				"value": "",
+				"valueType": "entityState"
+			}
+		],
+		"x": 450,
+		"y": 760,
+		"wires": [
+			[
+				"cb0080912a4863d4"
+			]
+		]
+	},
+	{
+		"id": "cb0080912a4863d4",
+		"type": "switch",
+		"z": "589563619b7481ee",
+		"name": "Mode?",
+		"property": "mode",
+		"rules": [
+			{
+				"t": "eq",
+				"v": "Full speed (schedule)"
+			},
+			{
+				"t": "eq",
+				"v": "Full speed (now)"
+			},
+			{
+				"t": "eq",
+				"v": "Solar surplus"
+			},
+			{
+				"t": "eq",
+				"v": "Solar only"
+			}
+		],
+		"outputs": 4,
+		"x": 650,
+		"y": 760,
+		"wires": [
+			[
+				"check_car_connected"
+			],
+			[
+				"check_car_connected"
+			],
+			[
+				"check_car_connected"
+			],
+			[
+				"check_car_connected"
+			]
+		]
+	},
+	{
+		"id": "check_car_connected",
+		"type": "api-current-state",
+		"z": "589563619b7481ee",
+		"name": "Car connected?",
+		"server": "5de24933a87c3a7c",
+		"version": 3,
+		"outputs": 2,
+		"halt_if": "Ready to charge,Awaiting start,Charging,Completed",
+		"halt_if_type": "list",
+		"entity_id": "sensor.easee_charger_status",
+		"state_type": "str",
+		"blockInputOverrides": false,
+		"outputProperties": [],
+		"x": 890,
+		"y": 760,
+		"wires": [
+			[
+				"branch_router"
+			],
+			[]
+		]
+	},
+	{
+		"id": "branch_router",
+		"type": "switch",
+		"z": "589563619b7481ee",
+		"name": "Route to branch",
+		"property": "mode",
+		"rules": [
+			{
+				"t": "eq",
+				"v": "Full speed (schedule)"
+			},
+			{
+				"t": "eq",
+				"v": "Full speed (now)"
+			},
+			{
+				"t": "eq",
+				"v": "Solar surplus"
+			},
+			{
+				"t": "eq",
+				"v": "Solar only"
+			}
+		],
+		"outputs": 4,
+		"x": 1110,
+		"y": 760,
+		"wires": [
+			[
+				"b72be9a16fedb01b"
+			],
+			[
+				"b3168de1b42c50cc"
+			],
+			[
+				"4149e2251ac6e901"
+			],
+			[
+				"f1d8103ac3f377c4"
+			]
+		]
+	},
+	{
+		"id": "b72be9a16fedb01b",
+		"type": "api-call-service",
+		"z": "589563619b7481ee",
+		"name": "Full speed (schedule) → 32A",
+		"server": "5de24933a87c3a7c",
+		"version": 7,
+		"action": "easee.set_circuit_dynamic_limit",
+		"data": "{\"device_id\":\"b6930861fd4fcd8ce162a7643da311f5\",\"current_p1\":32,\"time_to_live\":0}",
+		"dataType": "jsonata",
+		"x": 1380,
+		"y": 700,
+		"wires": [
+			[]
+		]
+	},
+	{
+		"id": "b3168de1b42c50cc",
+		"type": "api-call-service",
+		"z": "589563619b7481ee",
+		"name": "Full speed (now) → 32A",
+		"server": "5de24933a87c3a7c",
+		"version": 7,
+		"action": "easee.set_circuit_dynamic_limit",
+		"data": "{\"device_id\":\"b6930861fd4fcd8ce162a7643da311f5\",\"current_p1\":32,\"time_to_live\":0}",
+		"dataType": "jsonata",
+		"x": 1380,
+		"y": 760,
+		"wires": [
+			[
+				"c7f9e6b9f0a9c3b1"
+			]
+		]
+	},
+	{
+		"id": "c7f9e6b9f0a9c3b1",
+		"type": "api-call-service",
+		"z": "589563619b7481ee",
+		"name": "Press override schedule",
+		"server": "5de24933a87c3a7c",
+		"version": 7,
+		"action": "button.press",
+		"data": "{\"entity_id\":\"button.easee_charger_override_schedule\"}",
+		"dataType": "json",
+		"x": 1630,
+		"y": 760,
+		"wires": [
+			[]
+		]
+	},
+	{
+		"id": "4149e2251ac6e901",
+		"type": "api-current-state",
+		"z": "589563619b7481ee",
+		"name": "Get P1 import power",
+		"server": "5de24933a87c3a7c",
+		"version": 3,
+		"outputs": 1,
+		"entity_id": "sensor.p1_meter_power_import_power",
+		"state_type": "num",
+		"outputProperties": [
+			{
+				"property": "p1_power",
+				"propertyType": "msg",
+				"value": "",
+				"valueType": "entityState"
+			}
+		],
+		"x": 1380,
+		"y": 820,
+		"wires": [
+			[
+				"71524fdf58ec0905"
+			]
+		]
+	},
+	{
+		"id": "71524fdf58ec0905",
+		"type": "api-current-state",
+		"z": "589563619b7481ee",
+		"name": "Get current setpoint",
+		"server": "5de24933a87c3a7c",
+		"version": 3,
+		"outputs": 1,
+		"entity_id": "input_number.easee_dynamic_current",
+		"state_type": "num",
+		"outputProperties": [
+			{
+				"property": "current_setpoint",
+				"propertyType": "msg",
+				"value": "",
+				"valueType": "entityState"
+			}
+		],
+		"x": 1630,
+		"y": 820,
+		"wires": [
+			[
+				"033c887714f00b43"
+			]
+		]
+	},
+	{
+		"id": "033c887714f00b43",
+		"type": "function",
+		"z": "589563619b7481ee",
+		"name": "Calc new current (surplus)",
+		"func": "const p1 = Number(msg.p1_power);\nlet current = Number(msg.current_setpoint);\nconst wattsPerAmp = 400;\nconst marginW = wattsPerAmp;\nconst minA = 6;\nconst maxA = 32;\nif (isNaN(p1) || isNaN(current)) return null;\nif (p1 > marginW) current -= 1;\nelse if (p1 < -marginW) current += 1;\nif (current < minA) current = minA;\nif (current > maxA) current = maxA;\nmsg.new_current = Math.round(current);\nreturn msg;",
+		"outputs": 1,
+		"x": 1880,
+		"y": 820,
+		"wires": [
+			[
+				"baea14a161d35e1b",
+				"1d2e601bb8f5b12a"
+			]
+		]
+	},
+	{
+		"id": "baea14a161d35e1b",
+		"type": "api-call-service",
+		"z": "589563619b7481ee",
+		"name": "Set Easee current (surplus)",
+		"server": "5de24933a87c3a7c",
+		"version": 7,
+		"action": "easee.set_circuit_dynamic_limit",
+		"data": "{  \"device_id\": \"b6930861fd4fcd8ce162a7643da311f5\",  \"current_p1\": new_current,  \"time_to_live\": 0}",
+		"dataType": "jsonata",
+		"x": 2130,
+		"y": 800,
+		"wires": [
+			[]
+		]
+	},
+	{
+		"id": "1d2e601bb8f5b12a",
+		"type": "api-call-service",
+		"z": "589563619b7481ee",
+		"name": "Store setpoint (surplus)",
+		"server": "5de24933a87c3a7c",
+		"version": 7,
+		"action": "input_number.set_value",
+		"data": "{  \"entity_id\": \"input_number.easee_dynamic_current\",  \"value\": new_current}",
+		"dataType": "jsonata",
+		"x": 2150,
+		"y": 840,
+		"wires": [
+			[]
+		]
+	},
+	{
+		"id": "f1d8103ac3f377c4",
+		"type": "api-current-state",
+		"z": "589563619b7481ee",
+		"name": "Get P1 import power",
+		"server": "5de24933a87c3a7c",
+		"version": 3,
+		"outputs": 1,
+		"entity_id": "sensor.p1_meter_power_import_power",
+		"state_type": "num",
+		"outputProperties": [
+			{
+				"property": "p1_power",
+				"propertyType": "msg",
+				"value": "",
+				"valueType": "entityState"
+			}
+		],
+		"x": 1380,
+		"y": 880,
+		"wires": [
+			[
+				"e3db7ccd98eac081"
+			]
+		]
+	},
+	{
+		"id": "e3db7ccd98eac081",
+		"type": "api-current-state",
+		"z": "589563619b7481ee",
+		"name": "Get current setpoint",
+		"server": "5de24933a87c3a7c",
+		"version": 3,
+		"outputs": 1,
+		"entity_id": "input_number.easee_dynamic_current",
+		"state_type": "num",
+		"outputProperties": [
+			{
+				"property": "current_setpoint",
+				"propertyType": "msg",
+				"value": "",
+				"valueType": "entityState"
+			}
+		],
+		"x": 1630,
+		"y": 880,
+		"wires": [
+			[
+				"b86d36ccba2da8db"
+			]
+		]
+	},
+	{
+		"id": "b86d36ccba2da8db",
+		"type": "function",
+		"z": "589563619b7481ee",
+		"name": "Calc new current (solar only)",
+		"func": "const p1 = Number(msg.p1_power);\nlet current = Number(msg.current_setpoint);\nconst wattsPerAmp = 400;\nconst marginW = wattsPerAmp;\nconst minA = 0;\nconst maxA = 32;\nif (isNaN(p1) || isNaN(current)) return null;\nif (p1 > marginW) current -= 1;\nelse if (p1 < -marginW) current += 1;\nif (current < minA) current = minA;\nif (current > maxA) current = maxA;\nmsg.new_current = Math.round(current);\nreturn msg;",
+		"outputs": 1,
+		"x": 1880,
+		"y": 880,
+		"wires": [
+			[
+				"6b2e5229f2be4a11",
+				"dd27faf8a1f82ca9"
+			]
+		]
+	},
+	{
+		"id": "6b2e5229f2be4a11",
+		"type": "api-call-service",
+		"z": "589563619b7481ee",
+		"name": "Set Easee current (solar only)",
+		"server": "5de24933a87c3a7c",
+		"version": 7,
+		"action": "easee.set_circuit_dynamic_limit",
+		"data": "{  \"device_id\": \"b6930861fd4fcd8ce162a7643da311f5\",  \"current_p1\": new_current,  \"time_to_live\": 0}",
+		"dataType": "jsonata",
+		"x": 2130,
+		"y": 860,
+		"wires": [
+			[]
+		]
+	},
+	{
+		"id": "dd27faf8a1f82ca9",
+		"type": "api-call-service",
+		"z": "589563619b7481ee",
+		"name": "Store setpoint (solar only)",
+		"server": "5de24933a87c3a7c",
+		"version": 7,
+		"action": "input_number.set_value",
+		"data": "{  \"entity_id\": \"input_number.easee_dynamic_current\",  \"value\": new_current}",
+		"dataType": "jsonata",
+		"x": 2150,
+		"y": 900,
+		"wires": [
+			[]
+		]
+	},
+	{
+		"id": "5de24933a87c3a7c",
+		"type": "server",
+		"name": "Home Assistant",
+		"version": 5,
+		"addon": false,
+		"rejectUnauthorizedCerts": false,
+		"ha_boolean": "y|yes|true|on|home|open",
+		"connectionDelay": true,
+		"cacheJson": true,
+		"heartbeat": true,
+		"heartbeatInterval": "30",
+		"areaSelector": "friendlyName",
+		"deviceSelector": "friendlyName",
+		"entitySelector": "friendlyName",
+		"statusSeparator": ": ",
+		"statusYear": "hidden",
+		"statusMonth": "short",
+		"statusDay": "numeric",
+		"statusHourCycle": "default",
+		"statusTimeFormat": "h:m",
+		"enableGlobalContextStore": false
+	},
+	{
+		"id": "6449cdc0c7311af2",
+		"type": "global-config",
+		"env": [],
+		"modules": {
+			"node-red-contrib-home-assistant-websocket": "0.77.2"
+		}
+	}
+]
