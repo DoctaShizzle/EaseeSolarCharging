@@ -87,9 +87,11 @@ This means pressing **Boost** or **Solar only** is always a "this session" decis
 
 
 [Car disconnected?]    sensor.easee_charger_status (state-change trigger)
-    
-     [Reset mode  Default]
-     [Reset setpoint  6 A]
+         |
+     (connected)                  (disconnected)
+         |                              |
+[immediate evaluation]      [Reset mode  Default]
+                            [Reset setpoint  6 A]
 ```
 
 The **Brain** function node is the single place where all behaviour is defined. All configurable parameters are constants at the top of that node.
@@ -132,8 +134,13 @@ const SOLAR_ONLY_MIN_A = 0;
 const SOLAR_ONLY_MAX_A = 32;
 
 // Dead-band in watts before we adjust the current by 1 A.
-// ~400 W  1.7 A on a single 230 V phase.
+// ~400 W  1.7 A on a single 230 V phase — prevents oscillation.
 const SOLAR_MARGIN_W = 400;
+
+// Hysteresis: consecutive ticks required before ramping UP or DOWN.
+// Each tick is 30 s, so 10 ticks = 5 minutes of sustained condition before acting.
+// Both directions use the same value so the system is symmetric and stable.
+const HYSTERESIS_TICKS = 10;
 ```
 
 **Adding a schedule slot** (e.g. weekday evenings 20:0022:00 at 10 A):
@@ -187,11 +194,11 @@ The algorithm runs every 30 seconds and adjusts by 1 A per tick:
 
 | Condition | Action |
 |---|---|
-| P1 < 400 W (exporting) | Increase current by 1 A |
-| P1 > +400 W (importing) | Decrease current by 1 A (Default: floor at `slot.maxA`; Solar only: floor at 0 A) |
-| P1 within 400 W | Keep current unchanged |
+| P1 < −400 W (exporting) for **5 min** (10 ticks) | Increase current by 1 A |
+| P1 > +400 W (importing) for **5 min** (10 ticks) | Decrease current by 1 A (Default: floor at `slot.maxA`; Solar only: floor at 0 A) |
+| P1 within ±400 W | Reset both counters — keep current unchanged |
 
-The 400 W dead-band prevents oscillation. The setpoint is stored in `input_number.easee_dynamic_current` so the UI shows the live target and the value survives a Node-RED restart.
+The 400 W dead-band prevents oscillation. **Hysteresis** (`HYSTERESIS_TICKS = 10`) means sustained solar export or import must persist for 5 minutes before the current changes. The moment conditions reverse (or enter the dead-band), the counter resets immediately, so the system responds quickly to abrupt changes in either direction. The setpoint is stored in `input_number.easee_dynamic_current` so the UI shows the live target and the value survives a Node-RED restart.
 
 **Default mode** floors at `slot.maxA` during schedule windows  the car always charges at least at the configured schedule rate, even when clouds appear.
 
