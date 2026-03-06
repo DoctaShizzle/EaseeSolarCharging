@@ -39,7 +39,9 @@ cards:
             name: Dynamic Current
       - type: horizontal-stack
         cards:
-          - type: button
+          - show_name: true
+            show_icon: true
+            type: button
             name: Default
             icon: mdi:clock-outline
             tap_action:
@@ -62,8 +64,6 @@ cards:
         hours_to_show: 6
         refresh_interval: 30
         entities:
-          - entity: sensor.p1_meter_power_import_power
-            name: Net Import
           - entity: sensor.easee_charger_power
             name: Charger Power
           - entity: sensor.easee_dynamic_current_readonly
