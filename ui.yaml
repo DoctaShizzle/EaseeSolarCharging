@@ -40,25 +40,17 @@ cards:
       - type: horizontal-stack
         cards:
           - type: button
-            name: Full speed (schedule)
-            icon: mdi:clock-fast
+            name: Default
+            icon: mdi:clock-outline
             tap_action:
               action: call-service
-              service: script.easee_mode_full_speed_schedule
+              service: script.easee_mode_default
           - type: button
-            name: Full speed (now)
+            name: Boost
             icon: mdi:flash
             tap_action:
               action: call-service
-              service: script.easee_mode_full_speed_now
-      - type: horizontal-stack
-        cards:
-          - type: button
-            name: Solar surplus
-            icon: mdi:solar-power
-            tap_action:
-              action: call-service
-              service: script.easee_mode_solar_surplus
+              service: script.easee_mode_boost
           - type: button
             name: Solar only
             icon: mdi:white-balance-sunny

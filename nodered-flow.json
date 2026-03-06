@@ -1,35 +1,35 @@
 [
 	{
-		"id": "589563619b7481ee",
+		"id": "tab_easee",
 		"type": "tab",
-		"label": "Energy",
+		"label": "Easee Charging",
 		"disabled": false,
 		"info": "",
 		"env": []
 	},
 	{
-		"id": "0fc0078c1bd26fbc",
+		"id": "inject_timer",
 		"type": "inject",
-		"z": "589563619b7481ee",
+		"z": "tab_easee",
 		"name": "Every 30s",
 		"props": [],
 		"repeat": "30",
 		"once": true,
 		"onceDelay": "5",
 		"topic": "",
-		"x": 230,
-		"y": 760,
+		"x": 130,
+		"y": 200,
 		"wires": [
 			[
-				"17e7aaca4f37ca9f"
+				"get_mode"
 			]
 		]
 	},
 	{
-		"id": "17e7aaca4f37ca9f",
+		"id": "get_mode",
 		"type": "api-current-state",
-		"z": "589563619b7481ee",
-		"name": "Get Easee mode",
+		"z": "tab_easee",
+		"name": "Get mode",
 		"server": "5de24933a87c3a7c",
 		"version": 3,
 		"outputs": 1,
@@ -46,60 +46,18 @@
 				"valueType": "entityState"
 			}
 		],
-		"x": 450,
-		"y": 760,
+		"x": 310,
+		"y": 200,
 		"wires": [
 			[
-				"cb0080912a4863d4"
+				"get_charger_status"
 			]
 		]
 	},
 	{
-		"id": "cb0080912a4863d4",
-		"type": "switch",
-		"z": "589563619b7481ee",
-		"name": "Mode?",
-		"property": "mode",
-		"rules": [
-			{
-				"t": "eq",
-				"v": "Full speed (schedule)"
-			},
-			{
-				"t": "eq",
-				"v": "Full speed (now)"
-			},
-			{
-				"t": "eq",
-				"v": "Solar surplus"
-			},
-			{
-				"t": "eq",
-				"v": "Solar only"
-			}
-		],
-		"outputs": 4,
-		"x": 650,
-		"y": 760,
-		"wires": [
-			[
-				"check_car_connected"
-			],
-			[
-				"check_car_connected"
-			],
-			[
-				"check_car_connected"
-			],
-			[
-				"check_car_connected"
-			]
-		]
-	},
-	{
-		"id": "check_car_connected",
+		"id": "get_charger_status",
 		"type": "api-current-state",
-		"z": "589563619b7481ee",
+		"z": "tab_easee",
 		"name": "Car connected?",
 		"server": "5de24933a87c3a7c",
 		"version": 3,
@@ -110,303 +68,177 @@
 		"state_type": "str",
 		"blockInputOverrides": false,
 		"outputProperties": [],
-		"x": 890,
-		"y": 760,
+		"x": 510,
+		"y": 200,
 		"wires": [
 			[
-				"branch_router"
+				"get_p1_power"
 			],
 			[]
 		]
 	},
 	{
-		"id": "branch_router",
-		"type": "switch",
-		"z": "589563619b7481ee",
-		"name": "Route to branch",
-		"property": "mode",
-		"rules": [
+		"id": "get_p1_power",
+		"type": "api-current-state",
+		"z": "tab_easee",
+		"name": "Get P1 power (W)",
+		"server": "5de24933a87c3a7c",
+		"version": 3,
+		"outputs": 1,
+		"halt_if": "",
+		"halt_if_type": "str",
+		"entity_id": "sensor.p1_meter_power_import_power",
+		"state_type": "num",
+		"blockInputOverrides": false,
+		"outputProperties": [
 			{
-				"t": "eq",
-				"v": "Full speed (schedule)"
-			},
-			{
-				"t": "eq",
-				"v": "Full speed (now)"
-			},
-			{
-				"t": "eq",
-				"v": "Solar surplus"
-			},
-			{
-				"t": "eq",
-				"v": "Solar only"
+				"property": "p1_power",
+				"propertyType": "msg",
+				"value": "",
+				"valueType": "entityState"
 			}
 		],
-		"outputs": 4,
-		"x": 1110,
-		"y": 760,
+		"x": 720,
+		"y": 200,
 		"wires": [
 			[
-				"b72be9a16fedb01b"
-			],
-			[
-				"b3168de1b42c50cc"
-			],
-			[
-				"4149e2251ac6e901"
-			],
-			[
-				"f1d8103ac3f377c4"
+				"get_current_setpoint"
 			]
 		]
 	},
 	{
-		"id": "b72be9a16fedb01b",
+		"id": "get_current_setpoint",
+		"type": "api-current-state",
+		"z": "tab_easee",
+		"name": "Get current setpoint (A)",
+		"server": "5de24933a87c3a7c",
+		"version": 3,
+		"outputs": 1,
+		"halt_if": "",
+		"halt_if_type": "str",
+		"entity_id": "input_number.easee_dynamic_current",
+		"state_type": "num",
+		"blockInputOverrides": false,
+		"outputProperties": [
+			{
+				"property": "current_setpoint",
+				"propertyType": "msg",
+				"value": "",
+				"valueType": "entityState"
+			}
+		],
+		"x": 950,
+		"y": 200,
+		"wires": [
+			[
+				"brain"
+			]
+		]
+	},
+	{
+		"id": "brain",
+		"type": "function",
+		"z": "tab_easee",
+		"name": "Brain (all config here)",
+		"func": "// ============================================================\n// CONFIGURATION  edit all parameters here\n// ============================================================\n\nconst DEVICE_ID = 'b6930861fd4fcd8ce162a7643da311f5';\n\n// Default mode: schedule time slots.\n// Each slot: { startHour, endHour, maxA }\n// startHour inclusive, endHour exclusive (24-hour format).\n// maxA = the guaranteed minimum charging speed within this window.\n// If solar is exporting, the current can rise above maxA (up to SOLAR_MAX_A).\nconst SCHEDULE_WEEKDAY = [\n    { startHour: 1, endHour: 7, maxA: 16 }\n];\n\nconst SCHEDULE_WEEKEND = [\n    { startHour: 1,  endHour: 7,  maxA: 16 },\n    { startHour: 11, endHour: 17, maxA: 16 }\n];\n\n// Absolute maximum that solar surplus may ramp up to in Default mode.\nconst SOLAR_MAX_A = 32;\n\n// Maximum current for Boost mode (session-only).\nconst BOOST_MAX_A = 32;\n\n// Solar only mode: current range (session-only).\n// Min = 0 so the car pauses completely when no solar is available.\nconst SOLAR_ONLY_MIN_A = 0;\nconst SOLAR_ONLY_MAX_A = 32;\n\n// Dead-band in watts before we adjust the current by 1 A.\n// ~400 W  1.7 A on a single 230 V phase  prevents oscillation.\nconst SOLAR_MARGIN_W = 400;\n\n// ============================================================\n// LOGIC  no need to edit below this line\n// ============================================================\n\nconst mode     = msg.mode;\nconst p1       = Number(msg.p1_power);        // W, positive = importing, negative = exporting\nlet   setpoint = Number(msg.current_setpoint); // A\n\nif (isNaN(p1) || isNaN(setpoint)) {\n    node.warn('Invalid P1 or setpoint  skipping tick');\n    return null;\n}\n\nfunction isWeekend() {\n    const d = new Date().getDay(); // 0=Sun, 6=Sat\n    return d === 0 || d === 6;\n}\n\nfunction activeSlot(slots) {\n    const now  = new Date();\n    const hour = now.getHours() + now.getMinutes() / 60;\n    return slots.find(s => hour >= s.startHour && hour < s.endHour) || null;\n}\n\nfunction clamp(v, min, max) {\n    return Math.max(min, Math.min(max, Math.round(v)));\n}\n\n// --- Default mode: schedule-following + solar ramp-up ---\n// Outside every schedule window                 0 A (car pauses).\n// Inside a window, floor = slot.maxA:\n//   exporting solar (p1 < -margin)              ramp up toward SOLAR_MAX_A\n//   importing AND already above floor (p1 > margin)  ramp back down toward floor\n//   otherwise                                   keep setpoint unchanged\nif (mode === 'Default') {\n    const schedule = isWeekend() ? SCHEDULE_WEEKEND : SCHEDULE_WEEKDAY;\n    const slot     = activeSlot(schedule);\n    if (!slot) {\n        // Outside every window  stop charging\n        msg.payload = { new_current: 0, device_id: DEVICE_ID };\n    } else {\n        let newA = setpoint;\n        if      (p1 < -SOLAR_MARGIN_W)               newA += 1; // solar surplus  speed up\n        else if (p1 >  SOLAR_MARGIN_W && newA > slot.maxA) newA -= 1; // importing + above floor  slow down\n        newA = clamp(newA, slot.maxA, SOLAR_MAX_A);\n        msg.payload = { new_current: newA, device_id: DEVICE_ID };\n    }\n    return msg;\n}\n\n// --- Boost mode (session-only) ---\n// Charges at BOOST_MAX_A immediately, ignoring schedule and solar.\n// Automatically resets to Default when the car unplugs.\nif (mode === 'Boost') {\n    msg.payload = { new_current: BOOST_MAX_A, device_id: DEVICE_ID };\n    return msg;\n}\n\n// --- Solar only mode (session-only) ---\n// Tracks solar export; pauses (0 A) when no solar is available.\n// Automatically resets to Default when the car unplugs.\nif (mode === 'Solar only') {\n    let newA = setpoint;\n    if      (p1 < -SOLAR_MARGIN_W) newA += 1; // exporting  speed up\n    else if (p1 >  SOLAR_MARGIN_W) newA -= 1; // importing  slow down\n    newA = clamp(newA, SOLAR_ONLY_MIN_A, SOLAR_ONLY_MAX_A);\n    msg.payload = { new_current: newA, device_id: DEVICE_ID };\n    return msg;\n}\n\nnode.warn('Unknown mode: ' + mode);\nreturn null;",
+		"outputs": 1,
+		"x": 1200,
+		"y": 200,
+		"wires": [
+			[
+				"call_set_limit"
+			]
+		]
+	},
+	{
+		"id": "call_set_limit",
 		"type": "api-call-service",
-		"z": "589563619b7481ee",
-		"name": "Full speed (schedule) → 32A",
+		"z": "tab_easee",
+		"name": "easee.set_circuit_dynamic_limit",
 		"server": "5de24933a87c3a7c",
 		"version": 7,
 		"action": "easee.set_circuit_dynamic_limit",
-		"data": "{\"device_id\":\"b6930861fd4fcd8ce162a7643da311f5\",\"current_p1\":32,\"time_to_live\":0}",
+		"data": "{\"device_id\": payload.device_id, \"current_p1\": payload.new_current, \"time_to_live\": 0}",
 		"dataType": "jsonata",
-		"x": 1380,
-		"y": 700,
+		"x": 1450,
+		"y": 200,
+		"wires": [
+			[
+				"store_setpoint"
+			]
+		]
+	},
+	{
+		"id": "store_setpoint",
+		"type": "api-call-service",
+		"z": "tab_easee",
+		"name": "Store setpoint in HA helper",
+		"server": "5de24933a87c3a7c",
+		"version": 7,
+		"action": "input_number.set_value",
+		"data": "{\"entity_id\": \"input_number.easee_dynamic_current\", \"value\": payload.new_current}",
+		"dataType": "jsonata",
+		"x": 1700,
+		"y": 200,
 		"wires": [
 			[]
 		]
 	},
 	{
-		"id": "b3168de1b42c50cc",
-		"type": "api-call-service",
-		"z": "589563619b7481ee",
-		"name": "Full speed (now) → 32A",
+		"id": "watch_charger_disconnect",
+		"type": "server-state-changed",
+		"z": "tab_easee",
+		"name": "Car disconnected?",
 		"server": "5de24933a87c3a7c",
-		"version": 7,
-		"action": "easee.set_circuit_dynamic_limit",
-		"data": "{\"device_id\":\"b6930861fd4fcd8ce162a7643da311f5\",\"current_p1\":32,\"time_to_live\":0}",
-		"dataType": "jsonata",
-		"x": 1380,
-		"y": 760,
+		"version": 4,
+		"exposeToHomeAssistant": false,
+		"haConfig": [],
+		"entityidfilter": "sensor.easee_charger_status",
+		"entityidfiltertype": "exact",
+		"outputinitially": false,
+		"state_type": "str",
+		"haltifstate": "Ready to charge,Awaiting start,Charging,Completed",
+		"halt_if": "Ready to charge,Awaiting start,Charging,Completed",
+		"halt_if_type": "list",
+		"halt_if_compare": "is",
+		"outputs": 1,
+		"x": 130,
+		"y": 380,
 		"wires": [
 			[
-				"c7f9e6b9f0a9c3b1"
+				"reset_mode_to_default",
+				"reset_setpoint"
 			]
 		]
 	},
 	{
-		"id": "c7f9e6b9f0a9c3b1",
+		"id": "reset_mode_to_default",
 		"type": "api-call-service",
-		"z": "589563619b7481ee",
-		"name": "Press override schedule",
+		"z": "tab_easee",
+		"name": "Reset mode  Default",
 		"server": "5de24933a87c3a7c",
 		"version": 7,
-		"action": "button.press",
-		"data": "{\"entity_id\":\"button.easee_charger_override_schedule\"}",
+		"action": "input_select.select_option",
+		"data": "{\"entity_id\": \"input_select.easee_charging_mode\", \"option\": \"Default\"}",
 		"dataType": "json",
-		"x": 1630,
-		"y": 760,
+		"x": 400,
+		"y": 350,
 		"wires": [
 			[]
 		]
 	},
 	{
-		"id": "4149e2251ac6e901",
-		"type": "api-current-state",
-		"z": "589563619b7481ee",
-		"name": "Get P1 import power",
-		"server": "5de24933a87c3a7c",
-		"version": 3,
-		"outputs": 1,
-		"entity_id": "sensor.p1_meter_power_import_power",
-		"state_type": "num",
-		"outputProperties": [
-			{
-				"property": "p1_power",
-				"propertyType": "msg",
-				"value": "",
-				"valueType": "entityState"
-			}
-		],
-		"x": 1380,
-		"y": 820,
-		"wires": [
-			[
-				"71524fdf58ec0905"
-			]
-		]
-	},
-	{
-		"id": "71524fdf58ec0905",
-		"type": "api-current-state",
-		"z": "589563619b7481ee",
-		"name": "Get current setpoint",
-		"server": "5de24933a87c3a7c",
-		"version": 3,
-		"outputs": 1,
-		"entity_id": "input_number.easee_dynamic_current",
-		"state_type": "num",
-		"outputProperties": [
-			{
-				"property": "current_setpoint",
-				"propertyType": "msg",
-				"value": "",
-				"valueType": "entityState"
-			}
-		],
-		"x": 1630,
-		"y": 820,
-		"wires": [
-			[
-				"033c887714f00b43"
-			]
-		]
-	},
-	{
-		"id": "033c887714f00b43",
-		"type": "function",
-		"z": "589563619b7481ee",
-		"name": "Calc new current (surplus)",
-		"func": "const p1 = Number(msg.p1_power);\nlet current = Number(msg.current_setpoint);\nconst wattsPerAmp = 400;\nconst marginW = wattsPerAmp;\nconst minA = 6;\nconst maxA = 32;\nif (isNaN(p1) || isNaN(current)) return null;\nif (p1 > marginW) current -= 1;\nelse if (p1 < -marginW) current += 1;\nif (current < minA) current = minA;\nif (current > maxA) current = maxA;\nmsg.new_current = Math.round(current);\nreturn msg;",
-		"outputs": 1,
-		"x": 1880,
-		"y": 820,
-		"wires": [
-			[
-				"baea14a161d35e1b",
-				"1d2e601bb8f5b12a"
-			]
-		]
-	},
-	{
-		"id": "baea14a161d35e1b",
+		"id": "reset_setpoint",
 		"type": "api-call-service",
-		"z": "589563619b7481ee",
-		"name": "Set Easee current (surplus)",
-		"server": "5de24933a87c3a7c",
-		"version": 7,
-		"action": "easee.set_circuit_dynamic_limit",
-		"data": "{  \"device_id\": \"b6930861fd4fcd8ce162a7643da311f5\",  \"current_p1\": new_current,  \"time_to_live\": 0}",
-		"dataType": "jsonata",
-		"x": 2130,
-		"y": 800,
-		"wires": [
-			[]
-		]
-	},
-	{
-		"id": "1d2e601bb8f5b12a",
-		"type": "api-call-service",
-		"z": "589563619b7481ee",
-		"name": "Store setpoint (surplus)",
+		"z": "tab_easee",
+		"name": "Reset setpoint  6 A",
 		"server": "5de24933a87c3a7c",
 		"version": 7,
 		"action": "input_number.set_value",
-		"data": "{  \"entity_id\": \"input_number.easee_dynamic_current\",  \"value\": new_current}",
-		"dataType": "jsonata",
-		"x": 2150,
-		"y": 840,
-		"wires": [
-			[]
-		]
-	},
-	{
-		"id": "f1d8103ac3f377c4",
-		"type": "api-current-state",
-		"z": "589563619b7481ee",
-		"name": "Get P1 import power",
-		"server": "5de24933a87c3a7c",
-		"version": 3,
-		"outputs": 1,
-		"entity_id": "sensor.p1_meter_power_import_power",
-		"state_type": "num",
-		"outputProperties": [
-			{
-				"property": "p1_power",
-				"propertyType": "msg",
-				"value": "",
-				"valueType": "entityState"
-			}
-		],
-		"x": 1380,
-		"y": 880,
-		"wires": [
-			[
-				"e3db7ccd98eac081"
-			]
-		]
-	},
-	{
-		"id": "e3db7ccd98eac081",
-		"type": "api-current-state",
-		"z": "589563619b7481ee",
-		"name": "Get current setpoint",
-		"server": "5de24933a87c3a7c",
-		"version": 3,
-		"outputs": 1,
-		"entity_id": "input_number.easee_dynamic_current",
-		"state_type": "num",
-		"outputProperties": [
-			{
-				"property": "current_setpoint",
-				"propertyType": "msg",
-				"value": "",
-				"valueType": "entityState"
-			}
-		],
-		"x": 1630,
-		"y": 880,
-		"wires": [
-			[
-				"b86d36ccba2da8db"
-			]
-		]
-	},
-	{
-		"id": "b86d36ccba2da8db",
-		"type": "function",
-		"z": "589563619b7481ee",
-		"name": "Calc new current (solar only)",
-		"func": "const p1 = Number(msg.p1_power);\nlet current = Number(msg.current_setpoint);\nconst wattsPerAmp = 400;\nconst marginW = wattsPerAmp;\nconst minA = 0;\nconst maxA = 32;\nif (isNaN(p1) || isNaN(current)) return null;\nif (p1 > marginW) current -= 1;\nelse if (p1 < -marginW) current += 1;\nif (current < minA) current = minA;\nif (current > maxA) current = maxA;\nmsg.new_current = Math.round(current);\nreturn msg;",
-		"outputs": 1,
-		"x": 1880,
-		"y": 880,
-		"wires": [
-			[
-				"6b2e5229f2be4a11",
-				"dd27faf8a1f82ca9"
-			]
-		]
-	},
-	{
-		"id": "6b2e5229f2be4a11",
-		"type": "api-call-service",
-		"z": "589563619b7481ee",
-		"name": "Set Easee current (solar only)",
-		"server": "5de24933a87c3a7c",
-		"version": 7,
-		"action": "easee.set_circuit_dynamic_limit",
-		"data": "{  \"device_id\": \"b6930861fd4fcd8ce162a7643da311f5\",  \"current_p1\": new_current,  \"time_to_live\": 0}",
-		"dataType": "jsonata",
-		"x": 2130,
-		"y": 860,
-		"wires": [
-			[]
-		]
-	},
-	{
-		"id": "dd27faf8a1f82ca9",
-		"type": "api-call-service",
-		"z": "589563619b7481ee",
-		"name": "Store setpoint (solar only)",
-		"server": "5de24933a87c3a7c",
-		"version": 7,
-		"action": "input_number.set_value",
-		"data": "{  \"entity_id\": \"input_number.easee_dynamic_current\",  \"value\": new_current}",
-		"dataType": "jsonata",
-		"x": 2150,
-		"y": 900,
+		"data": "{\"entity_id\": \"input_number.easee_dynamic_current\", \"value\": 6}",
+		"dataType": "json",
+		"x": 400,
+		"y": 410,
 		"wires": [
 			[]
 		]
@@ -433,13 +265,5 @@
 		"statusHourCycle": "default",
 		"statusTimeFormat": "h:m",
 		"enableGlobalContextStore": false
-	},
-	{
-		"id": "6449cdc0c7311af2",
-		"type": "global-config",
-		"env": [],
-		"modules": {
-			"node-red-contrib-home-assistant-websocket": "0.77.2"
-		}
 	}
 ]

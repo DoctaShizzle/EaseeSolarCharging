@@ -60,9 +60,8 @@ input_select:
   easee_charging_mode:
     name: Easee Charging Mode
     options:
-      - Full speed (schedule)
-      - Full speed (now)
-      - Solar surplus
+      - Default
+      - Boost
       - Solar only
     icon: mdi:ev-station
 
@@ -70,76 +69,33 @@ input_select:
 # Scripts for Easee charging
 # =========================
 script:
-  easee_mode_full_speed_schedule:
-    alias: Easee Full Speed (schedule)
+  easee_mode_default:
+    alias: Easee Default
     sequence:
-      - service: easee.action_command
-        data:
-          device_id: b6930861fd4fcd8ce162a7643da311f5
-          action: stop
-      - service: easee.set_circuit_dynamic_limit
-        data:
-          device_id: b6930861fd4fcd8ce162a7643da311f5
-          current_p1: 32
-          time_to_live: 0
-      - service: input_select.select_option
-        data:
-          entity_id: input_select.easee_charging_mode
-          option: "Full speed (schedule)"
-
-  easee_mode_full_speed_now:
-    alias: Easee Full Speed (now)
-    sequence:
-      - service: easee.set_circuit_dynamic_limit
-        data:
-          device_id: b6930861fd4fcd8ce162a7643da311f5
-          current_p1: 32
-          time_to_live: 0
-      - service: button.press
-        target:
-          entity_id: button.easee_charger_override_schedule
-      - service: input_select.select_option
-        data:
-          entity_id: input_select.easee_charging_mode
-          option: "Full speed (now)"
-
-  easee_mode_solar_surplus:
-    alias: Easee Solar Surplus
-    sequence:
-      - service: easee.action_command
-        data:
-          device_id: b6930861fd4fcd8ce162a7643da311f5
-          action: stop
       - service: input_number.set_value
         data:
           entity_id: input_number.easee_dynamic_current
           value: 6
-      - service: easee.set_circuit_dynamic_limit
-        data:
-          device_id: b6930861fd4fcd8ce162a7643da311f5
-          current_p1: 6
-          time_to_live: 0
       - service: input_select.select_option
         data:
           entity_id: input_select.easee_charging_mode
-          option: "Solar surplus"
+          option: "Default"
+
+  easee_mode_boost:
+    alias: Easee Boost
+    sequence:
+      - service: input_select.select_option
+        data:
+          entity_id: input_select.easee_charging_mode
+          option: "Boost"
 
   easee_mode_solar_only:
     alias: Easee Solar Only
     sequence:
-      - service: easee.action_command
-        data:
-          device_id: b6930861fd4fcd8ce162a7643da311f5
-          action: stop
       - service: input_number.set_value
         data:
           entity_id: input_number.easee_dynamic_current
           value: 0
-      - service: easee.set_circuit_dynamic_limit
-        data:
-          device_id: b6930861fd4fcd8ce162a7643da311f5
-          current_p1: 0
-          time_to_live: 0
       - service: input_select.select_option
         data:
           entity_id: input_select.easee_charging_mode
