@@ -193,7 +193,7 @@
 		"id": "e5a4f36d403cbf64",
 		"type": "server-state-changed",
 		"z": "1725dfa6b7ed6d69",
-		"name": "Car disconnected?",
+		"name": "Car connected?",
 		"server": "5de24933a87c3a7c",
 		"version": 6,
 		"outputs": 2,

@@ -86,7 +86,7 @@ This means pressing **Boost** or **Solar only** is always a "this session" decis
 [input_number.set_value]  (keep HA helper in sync)
 
 
-[Car disconnected?]    sensor.easee_charger_status (state-change trigger)
+[Car connected?]    sensor.easee_charger_status (state-change trigger)
          |
      (connected)                  (disconnected)
          |                              |
