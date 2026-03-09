@@ -194,11 +194,13 @@ The algorithm runs every 30 seconds and adjusts by 1 A per tick:
 
 | Condition | Action |
 |---|---|
-| P1 < −400 W (exporting) for **5 min** (10 ticks) | Increase current by 1 A |
-| P1 > +400 W (importing) for **5 min** (10 ticks) | Decrease current by 1 A (Default: floor at `slot.maxA`; Solar only: floor at 0 A) |
-| P1 within ±400 W | Reset both counters — keep current unchanged |
+| P1 < −400 W (exporting) | Export counter +1; import counter resets to 0 |
+| P1 > +400 W (importing) | Import counter +1; export counter resets to 0 |
+| P1 within ±400 W (dead-band) | **Neither counter changes** — accumulated progress is preserved |
+| Export counter reaches 10 (5 min) | Increase current by 1 A |
+| Import counter reaches 10 (5 min) | Decrease current by 1 A (Default: floor at `slot.maxA`; Solar only: floor at 0 A) |
 
-The 400 W dead-band prevents oscillation. **Hysteresis** (`HYSTERESIS_TICKS = 10`) means sustained solar export or import must persist for 5 minutes before the current changes. The moment conditions reverse (or enter the dead-band), the counter resets immediately, so the system responds quickly to abrupt changes in either direction. The setpoint is stored in `input_number.easee_dynamic_current` so the UI shows the live target and the value survives a Node-RED restart.
+The 400 W dead-band prevents oscillation. A counter only resets when the **opposite** extreme is seen — a brief dip into the dead-band (cloud shadow, kettle switching on) does not wipe accumulated progress. This means the system ramps correctly on a normal variable-solar day rather than requiring an unbroken 5-minute block of clean export. The setpoint is stored in `input_number.easee_dynamic_current` so the UI shows the live target and the value survives a Node-RED restart.
 
 **Default mode** floors at `slot.maxA` during schedule windows  the car always charges at least at the configured schedule rate, even when clouds appear.
 
