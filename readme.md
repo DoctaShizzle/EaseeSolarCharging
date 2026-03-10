@@ -22,13 +22,16 @@ Every 30 seconds Node-RED evaluates the current mode and adjusts the Easee dynam
 
 This is the normal, always-on behaviour. It combines scheduled charging with opportunistic solar charging:
 
-1. **Outside every schedule window**  the dynamic current limit is set to 0 A. The car pauses charging.
-2. **Inside a schedule window**  the current starts at the slot's configured `maxA`. From there:
-   - If the house is **exporting** solar surplus (P1 < margin), the current ramps **up** by 1 A per tick (toward `SOLAR_MAX_A`).
+1. **Inside a schedule window** — the current floors at the slot's configured `maxA`. From there:
+   - If the house is **exporting** solar surplus long enough, the current ramps **up** by 1 A per tick (toward `SOLAR_MAX_A`).
    - If the house is **importing** AND the current is **above** the slot floor, it ramps **down** by 1 A per tick (back toward `slot.maxA`).
    - If the grid is balanced (within the dead-band), the current stays unchanged.
 
-The schedule floor (`slot.maxA`) is never undercut during a window  the schedule is always guaranteed.
+2. **Outside every schedule window** — the floor drops to 0 A, but the solar tracking still runs:
+   - If there is sufficient solar export, the current ramps up exactly as it would inside a window.
+   - When solar disappears (import sustained for 5 min), it ramps back down to 0 A and the car pauses.
+
+The schedule floor (`slot.maxA`) is guaranteed during windows — the schedule rate is always met even when clouds appear.
 
 | Day type | Default window(s) | Floor (maxA) |
 |---|---|---|
@@ -207,6 +210,6 @@ The algorithm runs every 30 seconds and adjusts by 1 A per tick:
 
 The 400 W dead-band prevents oscillation. A counter only resets when the **opposite** extreme is seen — a brief dip into the dead-band (cloud shadow, kettle switching on) does not wipe accumulated progress. This means the system ramps correctly on a normal variable-solar day rather than requiring an unbroken 5-minute block of clean export. The setpoint is stored in `input_number.easee_dynamic_current` so the UI shows the live target and the value survives a Node-RED restart.
 
-**Default mode** floors at `slot.maxA` during schedule windows  the car always charges at least at the configured schedule rate, even when clouds appear.
+**Default mode** floors at `slot.maxA` during schedule windows — the car always charges at least at the configured schedule rate, even when clouds appear. Outside windows the floor is 0 A, so the car only charges if solar is actually available.
 
-**Solar only mode** allows 0 A  the car halts completely when there is nothing to give, and restarts automatically when solar returns.
+**Solar only mode** also allows 0 A floor — the car halts completely when there is nothing to give, and restarts automatically when solar returns.
