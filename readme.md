@@ -133,6 +133,11 @@ const BOOST_MAX_A = 32;
 const SOLAR_ONLY_MIN_A = 0;
 const SOLAR_ONLY_MAX_A = 32;
 
+// Timezone for schedule evaluation.
+// Node-RED in Docker typically runs UTC even if your house is CET/CEST.
+// Set this to your IANA timezone name so the schedule follows wall-clock time.
+const TIMEZONE = 'Europe/Brussels';
+
 // Dead-band in watts before we adjust the current by 1 A.
 // ~400 W  1.7 A on a single 230 V phase — prevents oscillation.
 const SOLAR_MARGIN_W = 400;
