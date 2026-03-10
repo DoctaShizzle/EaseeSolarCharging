@@ -1,6 +1,6 @@
 [
 	{
-		"id": "1725dfa6b7ed6d69",
+		"id": "23ecfeb2dc0ae1d6",
 		"type": "tab",
 		"label": "Easee Charging",
 		"disabled": false,
@@ -8,9 +8,9 @@
 		"env": []
 	},
 	{
-		"id": "8ba6be44f898cc32",
+		"id": "b8c6948b05350194",
 		"type": "inject",
-		"z": "1725dfa6b7ed6d69",
+		"z": "23ecfeb2dc0ae1d6",
 		"name": "Every 30s",
 		"props": [],
 		"repeat": "30",
@@ -21,14 +21,14 @@
 		"y": 640,
 		"wires": [
 			[
-				"ff9875c44d050cd3"
+				"ef1d484ec19ff665"
 			]
 		]
 	},
 	{
-		"id": "ff9875c44d050cd3",
+		"id": "ef1d484ec19ff665",
 		"type": "api-current-state",
-		"z": "1725dfa6b7ed6d69",
+		"z": "23ecfeb2dc0ae1d6",
 		"name": "Get mode",
 		"server": "5de24933a87c3a7c",
 		"version": 3,
@@ -50,37 +50,41 @@
 		"y": 640,
 		"wires": [
 			[
-				"59b68dbceee1f6cb"
+				"728c9d11a8a7c1f4"
 			]
 		]
 	},
 	{
-		"id": "59b68dbceee1f6cb",
+		"id": "728c9d11a8a7c1f4",
 		"type": "api-current-state",
-		"z": "1725dfa6b7ed6d69",
+		"z": "23ecfeb2dc0ae1d6",
 		"name": "Car connected?",
 		"server": "5de24933a87c3a7c",
 		"version": 3,
 		"outputs": 2,
 		"halt_if": "ready_to_charge,awaiting_start,charging,completed",
-		"halt_if_type": "list",
+		"halt_if_type": "str",
+		"halt_if_compare": "includes",
 		"entity_id": "sensor.easee_charger_status",
 		"state_type": "str",
 		"blockInputOverrides": false,
 		"outputProperties": [],
+		"for": "10",
+		"forType": "num",
+		"forUnits": "seconds",
 		"x": 910,
 		"y": 640,
 		"wires": [
 			[
-				"7eaa8d3cf625532d"
+				"b40733efbfe1f942"
 			],
 			[]
 		]
 	},
 	{
-		"id": "7eaa8d3cf625532d",
+		"id": "b40733efbfe1f942",
 		"type": "api-current-state",
-		"z": "1725dfa6b7ed6d69",
+		"z": "23ecfeb2dc0ae1d6",
 		"name": "Get P1 power (W)",
 		"server": "5de24933a87c3a7c",
 		"version": 3,
@@ -102,14 +106,14 @@
 		"y": 640,
 		"wires": [
 			[
-				"982437e6b068fc22"
+				"39bb5ae890e244a6"
 			]
 		]
 	},
 	{
-		"id": "982437e6b068fc22",
+		"id": "39bb5ae890e244a6",
 		"type": "api-current-state",
-		"z": "1725dfa6b7ed6d69",
+		"z": "23ecfeb2dc0ae1d6",
 		"name": "Get current setpoint (A)",
 		"server": "5de24933a87c3a7c",
 		"version": 3,
@@ -131,14 +135,14 @@
 		"y": 640,
 		"wires": [
 			[
-				"8b810d5f3c02b61c"
+				"26ebab8b07a6ad93"
 			]
 		]
 	},
 	{
-		"id": "8b810d5f3c02b61c",
+		"id": "26ebab8b07a6ad93",
 		"type": "function",
-		"z": "1725dfa6b7ed6d69",
+		"z": "23ecfeb2dc0ae1d6",
 		"name": "Brain (all config here)",
 		"func": "// ============================================================\n// CONFIGURATION — edit all parameters here\n// ============================================================\n\nconst DEVICE_ID = 'b6930861fd4fcd8ce162a7643da311f5';\n\n// Timezone for schedule evaluation.\n// Node-RED in Docker typically runs UTC even if your house is CET/CEST.\n// Set this to your IANA timezone name so the schedule follows wall-clock time.\nconst TIMEZONE = 'Europe/Brussels';\n\n// Default mode: schedule time slots.\n// Each slot: { startHour, endHour, maxA }\n// startHour inclusive, endHour exclusive (24-hour format).\n// maxA = the guaranteed minimum charging speed within this window.\n// If solar is exporting long enough, the current can rise above maxA (up to SOLAR_MAX_A).\nconst SCHEDULE_WEEKDAY = [\n    { startHour: 1, endHour: 7, maxA: 16 }\n];\n\nconst SCHEDULE_WEEKEND = [\n    { startHour: 1,  endHour: 7,  maxA: 16 },\n    { startHour: 11, endHour: 17, maxA: 16 }\n];\n\n// Absolute maximum that solar surplus may ramp up to in Default mode.\nconst SOLAR_MAX_A = 32;\n\n// Maximum current for Boost mode (session-only).\nconst BOOST_MAX_A = 32;\n\n// Solar only mode: current range (session-only).\n// Min = 0 so the car pauses completely when no solar is available.\nconst SOLAR_ONLY_MIN_A = 0;\nconst SOLAR_ONLY_MAX_A = 32;\n\n// Dead-band in watts before we adjust the current by 1 A.\n// ~400 W ≈ 1.7 A on a single 230 V phase — prevents oscillation.\nconst SOLAR_MARGIN_W = 400;\n\n// Hysteresis: consecutive ticks required before ramping UP or DOWN.\n// Each tick is 30 s, so 10 ticks = 5 minutes of sustained condition before acting.\n// Both directions use the same value so the system is symmetric and stable.\nconst HYSTERESIS_TICKS = 10;\n\n// ============================================================\n// LOGIC — no need to edit below this line\n// ============================================================\n\nconst mode     = msg.mode;\nconst p1       = Number(msg.p1_power);        // W, positive = importing, negative = exporting\nlet   setpoint = Number(msg.current_setpoint); // A\n\nif (isNaN(p1) || isNaN(setpoint)) {\n    node.warn('Invalid P1 or setpoint — skipping tick');\n    return null;\n}\n\nfunction getLocalTime() {\n    // Intl.DateTimeFormat with explicit TIMEZONE so the schedule follows\n    // wall-clock time regardless of the Node-RED host system timezone (UTC in Docker).\n    const parts = new Intl.DateTimeFormat('en-GB', {\n        timeZone: TIMEZONE, weekday: 'short',\n        hour: '2-digit', minute: '2-digit', hour12: false\n    }).formatToParts(new Date());\n    const get = type => parts.find(p => p.type === type).value;\n    let hour = parseInt(get('hour'), 10);\n    if (hour === 24) hour = 0; // guard: some JS engines return 24 for midnight\n    return {\n        hour:      hour + parseInt(get('minute'), 10) / 60,\n        isWeekend: ['Sat', 'Sun'].includes(get('weekday'))\n    };\n}\n\nfunction clamp(v, min, max) {\n    return Math.max(min, Math.min(max, Math.round(v)));\n}\n\n// Hysteresis counters — stored in flow context so they persist across ticks.\n// exportTicks: ticks where the house is exporting; resets only when importing.\n// importTicks: ticks where the house is importing; resets only when exporting.\n// Dead-band readings leave both counters unchanged — only the opposite extreme resets a counter.\nlet exportTicks = flow.get('solarExportTicks') || 0;\nlet importTicks = flow.get('solarImportTicks') || 0;\n\nif (p1 < -SOLAR_MARGIN_W) {\n    exportTicks += 1;\n    importTicks  = 0;\n} else if (p1 > SOLAR_MARGIN_W) {\n    importTicks += 1;\n    exportTicks  = 0;\n} else {\n    // Dead-band: leave both counters unchanged.\n    // A single fluctuation inside ±SOLAR_MARGIN_W does not wipe accumulated progress.\n}\nflow.set('solarExportTicks', exportTicks);\nflow.set('solarImportTicks', importTicks);\n\nconst canRampUp   = exportTicks >= HYSTERESIS_TICKS;\nconst canRampDown = importTicks >= HYSTERESIS_TICKS;\n\n// --- Default mode: schedule-following + solar ramp-up ---\n// Outside every schedule window → 0 A (car pauses).\n// Inside a window, floor = slot.maxA:\n//   exporting solar for HYSTERESIS_TICKS ticks → ramp up toward SOLAR_MAX_A\n//   importing AND already above floor           → ramp back down toward floor immediately\n//   otherwise                                  → keep setpoint unchanged\nif (mode === 'Default') {\n    const { hour: localHour, isWeekend } = getLocalTime();\n    const schedule = isWeekend ? SCHEDULE_WEEKEND : SCHEDULE_WEEKDAY;\n    const slot     = schedule.find(s => localHour >= s.startHour && localHour < s.endHour) || null;\n    if (!slot) {\n        // Outside every window — stop charging\n        msg.payload = { new_current: 0, device_id: DEVICE_ID };\n    } else {\n        let newA = setpoint;\n        if      (canRampUp)                newA += 1; // sustained solar surplus → speed up\n        else if (canRampDown && newA > slot.maxA) newA -= 1; // sustained import + above floor → slow down\n        newA = clamp(newA, slot.maxA, SOLAR_MAX_A);\n        msg.payload = { new_current: newA, device_id: DEVICE_ID };\n    }\n    return msg;\n}\n\n// --- Boost mode (session-only) ---\n// Charges at BOOST_MAX_A immediately, ignoring schedule and solar.\n// Automatically resets to Default when the car unplugs.\nif (mode === 'Boost') {\n    msg.payload = { new_current: BOOST_MAX_A, device_id: DEVICE_ID };\n    return msg;\n}\n\n// --- Solar only mode (session-only) ---\n// Tracks solar export; pauses (0 A) when no solar is available.\n// Hysteresis prevents short cloud passes from causing repeated start/stop cycles.\n// Automatically resets to Default when the car unplugs.\nif (mode === 'Solar only') {\n    let newA = setpoint;\n    if      (canRampUp)   newA += 1; // sustained solar surplus → speed up\n    else if (canRampDown) newA -= 1; // sustained import → slow down\n    newA = clamp(newA, SOLAR_ONLY_MIN_A, SOLAR_ONLY_MAX_A);\n    msg.payload = { new_current: newA, device_id: DEVICE_ID };\n    return msg;\n}\n\nnode.warn('Unknown mode: ' + mode);\nreturn null;",
 		"outputs": 1,
@@ -151,14 +155,14 @@
 		"y": 640,
 		"wires": [
 			[
-				"69236ca74e9f6636"
+				"10f720717ab6aab4"
 			]
 		]
 	},
 	{
-		"id": "69236ca74e9f6636",
+		"id": "10f720717ab6aab4",
 		"type": "api-call-service",
-		"z": "1725dfa6b7ed6d69",
+		"z": "23ecfeb2dc0ae1d6",
 		"name": "easee.set_circuit_dynamic_limit",
 		"server": "5de24933a87c3a7c",
 		"version": 7,
@@ -169,14 +173,14 @@
 		"y": 640,
 		"wires": [
 			[
-				"43c435e18482c498"
+				"5b3e3e86ea41a15f"
 			]
 		]
 	},
 	{
-		"id": "43c435e18482c498",
+		"id": "5b3e3e86ea41a15f",
 		"type": "api-call-service",
-		"z": "1725dfa6b7ed6d69",
+		"z": "23ecfeb2dc0ae1d6",
 		"name": "Store setpoint in HA helper",
 		"server": "5de24933a87c3a7c",
 		"version": 7,
@@ -190,9 +194,9 @@
 		]
 	},
 	{
-		"id": "e5a4f36d403cbf64",
+		"id": "36726de905ba6cfc",
 		"type": "server-state-changed",
-		"z": "1725dfa6b7ed6d69",
+		"z": "23ecfeb2dc0ae1d6",
 		"name": "Car connected?",
 		"server": "5de24933a87c3a7c",
 		"version": 6,
@@ -209,33 +213,40 @@
 		"stateType": "str",
 		"ifState": "ready_to_charge,awaiting_start,charging,completed",
 		"ifStateType": "str",
-		"ifStateOperator": "is",
+		"ifStateOperator": "includes",
 		"outputOnlyOnStateChange": false,
-		"for": "60",
+		"for": "10",
 		"forType": "num",
 		"ignorePrevStateNull": false,
 		"ignorePrevStateUnknown": false,
 		"ignorePrevStateUnavailable": false,
 		"ignoreCurrentStateUnknown": false,
 		"ignoreCurrentStateUnavailable": false,
-		"outputProperties": [],
+		"outputProperties": [
+			{
+				"property": "payload",
+				"propertyType": "msg",
+				"value": "",
+				"valueType": "str"
+			}
+		],
 		"x": 530,
 		"y": 820,
 		"wires": [
 			[
-				"ff9875c44d050cd3"
+				"ef1d484ec19ff665"
 			],
 			[
-				"e4057ec538e9027e",
-				"3e69d2db329d1391",
-				"a1b2c3d4e5f60001"
+				"6992932d0f32a983",
+				"5ad2532fb92a4801",
+				"7f100880bae3265f"
 			]
 		]
 	},
 	{
-		"id": "e4057ec538e9027e",
+		"id": "6992932d0f32a983",
 		"type": "api-call-service",
-		"z": "1725dfa6b7ed6d69",
+		"z": "23ecfeb2dc0ae1d6",
 		"name": "Reset mode  Default",
 		"server": "5de24933a87c3a7c",
 		"version": 7,
@@ -249,9 +260,9 @@
 		]
 	},
 	{
-		"id": "3e69d2db329d1391",
+		"id": "5ad2532fb92a4801",
 		"type": "api-call-service",
-		"z": "1725dfa6b7ed6d69",
+		"z": "23ecfeb2dc0ae1d6",
 		"name": "Reset setpoint  6 A",
 		"server": "5de24933a87c3a7c",
 		"version": 7,
@@ -265,9 +276,9 @@
 		]
 	},
 	{
-		"id": "a1b2c3d4e5f60001",
+		"id": "7f100880bae3265f",
 		"type": "api-call-service",
-		"z": "1725dfa6b7ed6d69",
+		"z": "23ecfeb2dc0ae1d6",
 		"name": "Reset Easee limit  0 A",
 		"server": "5de24933a87c3a7c",
 		"version": 7,
@@ -304,7 +315,7 @@
 		"enableGlobalContextStore": false
 	},
 	{
-		"id": "838e6c0d78ced81c",
+		"id": "e24d701524d77ac3",
 		"type": "global-config",
 		"env": [],
 		"modules": {
