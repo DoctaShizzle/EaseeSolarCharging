@@ -104,6 +104,14 @@
 			[
 				"39bb5ae890e244a6"
 			]
+		],
+		"outputProperties": [
+			{
+				"property": "payload",
+				"propertyType": "msg",
+				"value": "",
+				"valueType": "results"
+			}
 		]
 	},
 	{
