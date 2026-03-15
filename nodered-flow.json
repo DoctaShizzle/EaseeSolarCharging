@@ -1,6 +1,6 @@
 [
 	{
-		"id": "23ecfeb2dc0ae1d6",
+		"id": "a41cf980c44fa1b8",
 		"type": "tab",
 		"label": "Easee Charging",
 		"disabled": false,
@@ -8,9 +8,9 @@
 		"env": []
 	},
 	{
-		"id": "b8c6948b05350194",
+		"id": "776f0a1a3ed2acfa",
 		"type": "inject",
-		"z": "23ecfeb2dc0ae1d6",
+		"z": "a41cf980c44fa1b8",
 		"name": "Every 1 min",
 		"props": [],
 		"repeat": "60",
@@ -21,14 +21,14 @@
 		"y": 640,
 		"wires": [
 			[
-				"ef1d484ec19ff665"
+				"5708144ea6ec70d0"
 			]
 		]
 	},
 	{
-		"id": "ef1d484ec19ff665",
+		"id": "5708144ea6ec70d0",
 		"type": "api-current-state",
-		"z": "23ecfeb2dc0ae1d6",
+		"z": "a41cf980c44fa1b8",
 		"name": "Get mode",
 		"server": "5de24933a87c3a7c",
 		"version": 3,
@@ -50,14 +50,14 @@
 		"y": 640,
 		"wires": [
 			[
-				"728c9d11a8a7c1f4"
+				"f5398221e965ae92"
 			]
 		]
 	},
 	{
-		"id": "728c9d11a8a7c1f4",
+		"id": "f5398221e965ae92",
 		"type": "api-current-state",
-		"z": "23ecfeb2dc0ae1d6",
+		"z": "a41cf980c44fa1b8",
 		"name": "Car connected?",
 		"server": "5de24933a87c3a7c",
 		"version": 3,
@@ -76,15 +76,15 @@
 		"y": 640,
 		"wires": [
 			[
-				"b40733efbfe1f942"
+				"2505c5f649961c54"
 			],
 			[]
 		]
 	},
 	{
-		"id": "b40733efbfe1f942",
+		"id": "2505c5f649961c54",
 		"type": "api-get-history",
-		"z": "23ecfeb2dc0ae1d6",
+		"z": "a41cf980c44fa1b8",
 		"name": "Get P1 history",
 		"server": "5de24933a87c3a7c",
 		"version": 3,
@@ -96,28 +96,20 @@
 		"relativeTime": "5m",
 		"flatten": true,
 		"outputType": "array",
-		"outputResultsById": false,
-		"responseType": "array",
+		"outputLocationType": "msg",
+		"outputLocation": "payload",
 		"x": 1120,
 		"y": 640,
 		"wires": [
 			[
-				"39bb5ae890e244a6"
+				"d2c10dec25f2627b"
 			]
-		],
-		"outputProperties": [
-			{
-				"property": "payload",
-				"propertyType": "msg",
-				"value": "",
-				"valueType": "results"
-			}
 		]
 	},
 	{
-		"id": "39bb5ae890e244a6",
+		"id": "d2c10dec25f2627b",
 		"type": "api-current-state",
-		"z": "23ecfeb2dc0ae1d6",
+		"z": "a41cf980c44fa1b8",
 		"name": "Get current setpoint (A)",
 		"server": "5de24933a87c3a7c",
 		"version": 3,
@@ -139,14 +131,14 @@
 		"y": 640,
 		"wires": [
 			[
-				"26ebab8b07a6ad93"
+				"e1d45f884cd67217"
 			]
 		]
 	},
 	{
-		"id": "26ebab8b07a6ad93",
+		"id": "e1d45f884cd67217",
 		"type": "function",
-		"z": "23ecfeb2dc0ae1d6",
+		"z": "a41cf980c44fa1b8",
 		"name": "Brain (all config here)",
 		"func": "// ============================================================\n// CONFIGURATION — edit all parameters here\n// ============================================================\n\nconst DEVICE_ID = 'b6930861fd4fcd8ce162a7643da311f5';\n\n// Timezone for schedule evaluation.\n// Node-RED in Docker typically runs UTC even if your house is CET/CEST.\n// Set this to your IANA timezone name so the schedule follows wall-clock time.\nconst TIMEZONE = 'Europe/Brussels';\n\n// Default mode: schedule time slots.\n// Each slot: { startHour, endHour, maxA }\n// startHour inclusive, endHour exclusive (24-hour format).\n// maxA = the guaranteed minimum charging speed within this window.\n// If solar is exporting, the current can rise above maxA (up to SOLAR_MAX_A).\nconst SCHEDULE_WEEKDAY = [\n    { startHour: 1, endHour: 7, maxA: 16 }\n];\n\nconst SCHEDULE_WEEKEND = [\n    { startHour: 1,  endHour: 7,  maxA: 16 },\n    { startHour: 11, endHour: 17, maxA: 16 }\n];\n\n// Absolute maximum that solar surplus may ramp up to in Default mode.\nconst SOLAR_MAX_A = 32;\n\n// Maximum current for Boost mode (session-only).\nconst BOOST_MAX_A = 32;\n\n// Solar only mode: current range (session-only).\n// Min = 0 so the car pauses completely when no solar is available.\nconst SOLAR_ONLY_MIN_A = 0;\nconst SOLAR_ONLY_MAX_A = 32;\n\n// Target net export in watts. The algorithm aims to keep the house exporting\n// exactly this many watts after adjusting the charging current.\n// Higher = more buffer/slower to react to export; lower = tighter tracking.\nconst SOLAR_MARGIN_W = 400;\n\n// Mains voltage (V) used to convert watts to amps.\n// 230 V for single-phase European installations.\nconst PHASE_VOLTAGE = 230;\n\n// Sliding window: the \"Get P1 history\" node fetches all P1 state changes\n// from the HA recorder. The window duration is set on that node (relativeTime).\n// The Brain computes a time-weighted average of whatever history arrives.\n// To change the window, update the relativeTime field on \"Get P1 history\".\n\n// ============================================================\n// LOGIC — no need to edit below this line\n// ============================================================\n\nconst mode     = msg.mode;\nlet   setpoint = Number(msg.current_setpoint); // A\n\nif (isNaN(setpoint)) {\n    node.warn('Invalid setpoint — skipping tick');\n    return null;\n}\n\nfunction getLocalTime() {\n    // Intl.DateTimeFormat with explicit TIMEZONE so the schedule follows\n    // wall-clock time regardless of the Node-RED host system timezone (UTC in Docker).\n    const parts = new Intl.DateTimeFormat('en-GB', {\n        timeZone: TIMEZONE, weekday: 'short',\n        hour: '2-digit', minute: '2-digit', hour12: false\n    }).formatToParts(new Date());\n    const get = type => parts.find(p => p.type === type).value;\n    let hour = parseInt(get('hour'), 10);\n    if (hour === 24) hour = 0; // guard: some JS engines return 24 for midnight\n    return {\n        hour:      hour + parseInt(get('minute'), 10) / 60,\n        isWeekend: ['Sat', 'Sun'].includes(get('weekday'))\n    };\n}\n\nfunction clamp(v, min, max) {\n    return Math.max(min, Math.min(max, Math.round(v)));\n}\n\n// Time-weighted average of P1 over the history window.\n// msg.payload is an array of HA history objects: [{ state, last_changed }, ...]\n// sorted oldest-first. Each value is weighted by how long it was active before\n// the next change. The final value runs up to now.\nfunction timeWeightedAvgP1(history) {\n    if (!Array.isArray(history) || history.length === 0) {\n        node.warn('Empty P1 history — skipping tick');\n        return null;\n    }\n    const now = Date.now();\n    let weightedSum = 0;\n    let totalMs     = 0;\n    for (let i = 0; i < history.length; i++) {\n        const val  = parseFloat(history[i].state);\n        if (isNaN(val)) continue;                          // skip unavailable/unknown\n        const from = new Date(history[i].last_changed).getTime();\n        const to   = i + 1 < history.length\n                     ? new Date(history[i + 1].last_changed).getTime()\n                     : now;\n        const ms   = Math.max(0, to - from);\n        weightedSum += val * ms;\n        totalMs     += ms;\n    }\n    if (totalMs === 0) {\n        node.warn('P1 history has no duration — skipping tick');\n        return null;\n    }\n    return weightedSum / totalMs;\n}\n\nconst avgP1 = timeWeightedAvgP1(msg.payload);\nif (avgP1 === null) return null;\n\n// Direct target calculation.\n// We want the house to export SOLAR_MARGIN_W watts after the adjustment.\n// Desired P1 = -SOLAR_MARGIN_W  →  delta needed = (-SOLAR_MARGIN_W - avgP1) / PHASE_VOLTAGE\n//   avgP1 = +500 W (importing 500 W): delta = (-400 - 500) / 230 ≈ -3.9 A  → slow down\n//   avgP1 = -800 W (exporting 800 W): delta = (-400 - -800) / 230 ≈ +1.7 A → speed up\n//   avgP1 = -400 W (exactly on target): delta = 0 A                         → no change\nfunction targetA(currentA, floorA, maxA) {\n    const deltaA = (-SOLAR_MARGIN_W - avgP1) / PHASE_VOLTAGE;\n    return clamp(currentA + deltaA, floorA, maxA);\n}\n\n// --- Default mode: schedule-following + solar tracking ---\n// Inside a schedule window: floor = slot.maxA. Solar can ramp above it toward SOLAR_MAX_A.\n// Outside every window:     floor = 0 A. Solar can still charge; drops to 0 when no export.\nif (mode === 'Default') {\n    const { hour: localHour, isWeekend } = getLocalTime();\n    const schedule = isWeekend ? SCHEDULE_WEEKEND : SCHEDULE_WEEKDAY;\n    const slot     = schedule.find(s => localHour >= s.startHour && localHour < s.endHour) || null;\n    const floor    = slot ? slot.maxA : 0; // guaranteed minimum inside window; 0 outside\n    msg.payload = { new_current: targetA(setpoint, floor, SOLAR_MAX_A), device_id: DEVICE_ID };\n    return msg;\n}\n\n// --- Boost mode (session-only) ---\n// Charges at BOOST_MAX_A immediately, ignoring schedule and solar.\n// Automatically resets to Default when the car unplugs.\nif (mode === 'Boost') {\n    msg.payload = { new_current: BOOST_MAX_A, device_id: DEVICE_ID };\n    return msg;\n}\n\n// --- Solar only mode (session-only) ---\n// Tracks solar export; pauses (0 A) when no solar is available.\n// Automatically resets to Default when the car unplugs.\nif (mode === 'Solar only') {\n    msg.payload = { new_current: targetA(setpoint, SOLAR_ONLY_MIN_A, SOLAR_ONLY_MAX_A), device_id: DEVICE_ID };\n    return msg;\n}\n\nnode.warn('Unknown mode: ' + mode);\nreturn null;",
 		"outputs": 1,
@@ -159,14 +151,14 @@
 		"y": 640,
 		"wires": [
 			[
-				"10f720717ab6aab4"
+				"770271dc716b14ac"
 			]
 		]
 	},
 	{
-		"id": "10f720717ab6aab4",
+		"id": "770271dc716b14ac",
 		"type": "api-call-service",
-		"z": "23ecfeb2dc0ae1d6",
+		"z": "a41cf980c44fa1b8",
 		"name": "easee.set_circuit_dynamic_limit",
 		"server": "5de24933a87c3a7c",
 		"version": 7,
@@ -177,14 +169,14 @@
 		"y": 640,
 		"wires": [
 			[
-				"5b3e3e86ea41a15f"
+				"b939581a79b5f85e"
 			]
 		]
 	},
 	{
-		"id": "5b3e3e86ea41a15f",
+		"id": "b939581a79b5f85e",
 		"type": "api-call-service",
-		"z": "23ecfeb2dc0ae1d6",
+		"z": "a41cf980c44fa1b8",
 		"name": "Store setpoint in HA helper",
 		"server": "5de24933a87c3a7c",
 		"version": 7,
@@ -198,9 +190,9 @@
 		]
 	},
 	{
-		"id": "36726de905ba6cfc",
+		"id": "36240b13dbf230d9",
 		"type": "server-state-changed",
-		"z": "23ecfeb2dc0ae1d6",
+		"z": "a41cf980c44fa1b8",
 		"name": "Car connected?",
 		"server": "5de24933a87c3a7c",
 		"version": 6,
@@ -238,19 +230,19 @@
 		"y": 820,
 		"wires": [
 			[
-				"ef1d484ec19ff665"
+				"5708144ea6ec70d0"
 			],
 			[
-				"6992932d0f32a983",
-				"5ad2532fb92a4801",
-				"7f100880bae3265f"
+				"40e84b3f68e1d2ac",
+				"86e9cd9e9404559e",
+				"35fe2ec88b22eded"
 			]
 		]
 	},
 	{
-		"id": "6992932d0f32a983",
+		"id": "40e84b3f68e1d2ac",
 		"type": "api-call-service",
-		"z": "23ecfeb2dc0ae1d6",
+		"z": "a41cf980c44fa1b8",
 		"name": "Reset mode  Default",
 		"server": "5de24933a87c3a7c",
 		"version": 7,
@@ -264,9 +256,9 @@
 		]
 	},
 	{
-		"id": "5ad2532fb92a4801",
+		"id": "86e9cd9e9404559e",
 		"type": "api-call-service",
-		"z": "23ecfeb2dc0ae1d6",
+		"z": "a41cf980c44fa1b8",
 		"name": "Reset setpoint  6 A",
 		"server": "5de24933a87c3a7c",
 		"version": 7,
@@ -280,9 +272,9 @@
 		]
 	},
 	{
-		"id": "7f100880bae3265f",
+		"id": "35fe2ec88b22eded",
 		"type": "api-call-service",
-		"z": "23ecfeb2dc0ae1d6",
+		"z": "a41cf980c44fa1b8",
 		"name": "Reset Easee limit  0 A",
 		"server": "5de24933a87c3a7c",
 		"version": 7,
@@ -319,7 +311,7 @@
 		"enableGlobalContextStore": false
 	},
 	{
-		"id": "e24d701524d77ac3",
+		"id": "d0273563bbd8a9ca",
 		"type": "global-config",
 		"env": [],
 		"modules": {
