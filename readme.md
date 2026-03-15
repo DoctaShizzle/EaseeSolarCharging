@@ -12,7 +12,7 @@ The Easee built-in schedule is **disabled**. Node-RED takes full control of when
 - **Boost**  session-only: charges at maximum speed immediately, regardless of schedule or solar. Resets to Default when the car unplugs.
 - **Solar only**  session-only: follows solar export only, pausing completely when there is nothing to give. Resets to Default when the car unplugs.
 
-Every 30 seconds Node-RED evaluates the current mode and adjusts the Easee dynamic current limit accordingly.
+Every 60 seconds Node-RED evaluates the current mode and adjusts the Easee dynamic current limit accordingly.
 
 ---
 
@@ -141,9 +141,16 @@ const SOLAR_ONLY_MAX_A = 32;
 // Set this to your IANA timezone name so the schedule follows wall-clock time.
 const TIMEZONE = 'Europe/Brussels';
 
-// Dead-band in watts before we adjust the current by 1 A.
-// ~400 W  1.7 A on a single 230 V phase — prevents oscillation.
+// Target net export in watts. The algorithm aims to keep the house exporting
+// exactly this many watts after adjusting the charging current.
 const SOLAR_MARGIN_W = 400;
+
+// Mains voltage used to convert watts to amps. 230 V for single-phase Europe.
+const PHASE_VOLTAGE = 230;
+
+// Sliding window size in minutes. P1 readings are averaged over this period
+// before computing the new charging current.
+const WINDOW_MINUTES = 5;
 
 // Hysteresis: consecutive ticks required before ramping UP or DOWN.
 // Each tick is 30 s, so 10 ticks = 5 minutes of sustained condition before acting.
