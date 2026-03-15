@@ -91,7 +91,7 @@
 		"startDate": "",
 		"endDate": "",
 		"entityId": "sensor.p1_meter_power_import_power",
-		"entityIdType": "str",
+		"entityIdType": "equals",
 		"useRelativeTime": true,
 		"relativeTime": "5m",
 		"flatten": true,
