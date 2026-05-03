@@ -14,6 +14,8 @@ The Easee built-in schedule is **disabled**. Node-RED takes full control of when
 
 Every 60 seconds Node-RED evaluates the current mode and adjusts the Easee dynamic current limit accordingly.
 
+Two physical buttons on a Shelly Pro 2 relay provide convenient local control, with LEDs indicating the active mode.
+
 ---
 
 ## Modes
@@ -62,10 +64,23 @@ This means pressing **Boost** or **Solar only** is always a "this session" decis
 
 ---
 
+## Shelly Pro 2 Integration
+
+A [Shelly Pro 2](https://shelly.cloud/products/shelly-pro-2/) relay provides physical button control and LED feedback:
+
+- **Button 1 (Input 0)**: Toggles between **Default** and **Solar only** modes.
+- **Button 2 (Input 1)**: Toggles between **Default** and **Boost** modes.
+- **LED 0 (Output 0)**: Lights up when mode is **Solar only**.
+- **LED 1 (Output 1)**: Lights up when mode is **Boost**. Both LEDs are off in **Default** mode.
+
+The buttons send `shelly.click` events to Home Assistant, which trigger automations that change the mode accordingly. A separate automation keeps the Shelly outputs (LEDs) in sync with the selected mode at all times, including on Home Assistant startup.
+
+---
+
 ## Architecture
 
 ```
-[Every 30s]
+[Every 60s]
     
     
 [Get mode]    input_select.easee_charging_mode
@@ -74,7 +89,7 @@ This means pressing **Boost** or **Solar only** is always a "this session" decis
 [Car connected?]    sensor.easee_charger_status
       (not connected  stop)
     
-[Get P1 power (W)]    sensor.p1_meter_power_import_power
+[Get P1 power (W)]    sensor.p1_meter_power_import_power (5-min history)
     
     
 [Get current setpoint (A)]    input_number.easee_dynamic_current
@@ -174,9 +189,9 @@ const SCHEDULE_WEEKDAY = [
 
 | File | Purpose |
 |---|---|
-| `configuration.yaml` | Home Assistant helpers (`input_select`, `input_number`) and scripts that set the mode. Merge into your `configuration.yaml`. |
+| `configuration.yaml` | Home Assistant helpers (`input_select`, `input_number`), mode-change scripts, Shelly button event automations, and LED sync logic. Merge into your `configuration.yaml`. |
 | `ui.yaml` | Lovelace card definition  three mode buttons plus charger sensors. Paste into a manual card. |
-| `nodered-flow.json` | Node-RED flow. Import via *Menu  Import* in Node-RED. |
+| `nodered-flow.json` | Node-RED flow with the 60-second evaluation cycle and Brain logic. Import via *Menu  Import* in Node-RED. |
 
 ---
 
@@ -205,15 +220,15 @@ The P1 smart meter reports signed power in watts:
 - **Positive** = the house is importing from the grid
 - **Negative** = the house is exporting to the grid (solar surplus)
 
-The algorithm runs every 30 seconds and adjusts by 1 A per tick:
+The algorithm runs every 60 seconds and computes a time-weighted average of P1 power over the past 5 minutes to smooth out fluctuations, then adjusts by up to 1 A per tick based on that average:
 
 | Condition | Action |
 |---|---|
-| P1 < −400 W (exporting) | Export counter +1; import counter resets to 0 |
-| P1 > +400 W (importing) | Import counter +1; export counter resets to 0 |
-| P1 within ±400 W (dead-band) | **Neither counter changes** — accumulated progress is preserved |
-| Export counter reaches 10 (5 min) | Increase current by 1 A |
-| Import counter reaches 10 (5 min) | Decrease current by 1 A (Default: floor at `slot.maxA`; Solar only: floor at 0 A) |
+| Avg P1 < −400 W (exporting surplus) | Current increases by 1 A (toward ceiling) |
+| Avg P1 > +400 W (importing from grid) | Current decreases by 1 A (toward floor) |
+| Avg P1 within ±400 W (dead-band) | **Current stays unchanged** — stable hysteresis |
+| Floor limit (Default) | `slot.maxA` inside schedule window; 0 A outside |
+| Ceiling limit (Default & Solar only) | `SOLAR_MAX_A` and `SOLAR_ONLY_MAX_A` respectively |
 
 The 400 W dead-band prevents oscillation. A counter only resets when the **opposite** extreme is seen — a brief dip into the dead-band (cloud shadow, kettle switching on) does not wipe accumulated progress. This means the system ramps correctly on a normal variable-solar day rather than requiring an unbroken 5-minute block of clean export. The setpoint is stored in `input_number.easee_dynamic_current` so the UI shows the live target and the value survives a Node-RED restart.
 
