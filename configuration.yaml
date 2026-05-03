@@ -42,6 +42,19 @@ template:
         state: "{{ states('input_number.easee_dynamic_current') | int }}"
         unit_of_measurement: "A"
         icon: mdi:current-ac
+        
+        # =========================
+        # Sensors for Marstek Batteries
+        # =========================
+        
+      - name: marstek_power_import
+        unique_id: sensor.marstek_power_import
+        state: >
+          {% set power1 = states('sensor.plug_1_power') | float(0) %}
+          {% set power2 = states('sensor.plug_2_power') | float(0) %}
+          {{ (power1 + power2) }}
+        unit_of_measurement: W
+        icon: mdi:battery-charging-60
 
 # =========================
 # Helpers for Easee charging
@@ -68,6 +81,9 @@ input_select:
 # =========================
 # Scripts for Easee charging
 # =========================
+
+# Scripts for Easee Charging modes
+
 script:
   easee_mode_default:
     alias: Easee Default
@@ -100,3 +116,120 @@ script:
         data:
           entity_id: input_select.easee_charging_mode
           option: "Solar only"
+          
+# Automations to toggle modes from Shelly button presses
+
+automation:
+  - id: shelly_input0_btn_down_toggle_solar
+    alias: "Shelly Input 0 btn_down toggles Solar mode"
+    mode: single
+    trigger:
+      - platform: event
+        event_type: shelly.click
+    condition:
+      - condition: template
+        value_template: >
+          {% set d = trigger.event.data %}
+          {% if (d.device_id or d.device or d.id) != '37ec3fb6778e2eac581777efb3bfbaad' %}
+            {{ false }}
+          {% else %}
+            {{ (d.click_type|string).lower() == 'btn_down' and (d.channel is not none and (d.channel|int) == 1) }}
+          {% endif %}
+    action:
+      - choose:
+          - conditions:
+              - condition: state
+                entity_id: input_select.easee_charging_mode
+                state: "Solar only"
+            sequence:
+              - service: script.easee_mode_default
+          - conditions:
+              - condition: state
+                entity_id: input_select.easee_charging_mode
+                state: "Boost"
+            sequence:
+              - service: script.easee_mode_solar_only
+        default:
+          - service: script.easee_mode_solar_only
+
+  - id: shelly_input1_btn_down_toggle_boost
+    alias: "Shelly Input 1 btn_down toggles Boost mode"
+    mode: single
+    trigger:
+      - platform: event
+        event_type: shelly.click
+    condition:
+      - condition: template
+        value_template: >
+          {% set d = trigger.event.data %}
+          {% if (d.device_id or d.device or d.id) != '37ec3fb6778e2eac581777efb3bfbaad' %}
+            {{ false }}
+          {% else %}
+            {{ (d.click_type|string).lower() == 'btn_down' and (d.channel is not none and (d.channel|int) == 2) }}
+          {% endif %}
+    action:
+      - choose:
+          - conditions:
+              - condition: state
+                entity_id: input_select.easee_charging_mode
+                state: "Boost"
+            sequence:
+              - service: script.easee_mode_default
+          - conditions:
+              - condition: state
+                entity_id: input_select.easee_charging_mode
+                state: "Solar only"
+            sequence:
+              - service: script.easee_mode_boost
+        default:
+          - service: script.easee_mode_boost
+
+
+# Automations to keep Shelly outputs (LEDs) in sync with the selected mode
+
+  - alias: "Sync Shelly outputs to Easee mode"
+    id: sync_shelly_outputs_to_easee_mode
+    trigger:
+      - platform: state
+        entity_id: input_select.easee_charging_mode
+      - platform: homeassistant
+        event: start
+    action:
+      - wait_template: >
+          {{ states('switch.shellypro2_ec62609eaa2c_output_0') not in ['unknown','unavailable'] and
+             states('switch.shellypro2_ec62609eaa2c_output_1') not in ['unknown','unavailable'] }}
+        timeout: '00:00:30'
+        continue_on_timeout: true
+      - choose:
+          - conditions:
+              - condition: state
+                entity_id: input_select.easee_charging_mode
+                state: "Default"
+            sequence:
+              - service: switch.turn_off
+                target:
+                  entity_id:
+                    - switch.shellypro2_ec62609eaa2c_output_0
+                    - switch.shellypro2_ec62609eaa2c_output_1
+          - conditions:
+              - condition: state
+                entity_id: input_select.easee_charging_mode
+                state: "Solar only"
+            sequence:
+              - service: switch.turn_on
+                target:
+                  entity_id: switch.shellypro2_ec62609eaa2c_output_0
+              - service: switch.turn_off
+                target:
+                  entity_id: switch.shellypro2_ec62609eaa2c_output_1
+          - conditions:
+              - condition: state
+                entity_id: input_select.easee_charging_mode
+                state: "Boost"
+            sequence:
+              - service: switch.turn_on
+                target:
+                  entity_id: switch.shellypro2_ec62609eaa2c_output_1
+              - service: switch.turn_off
+                target:
+                  entity_id: switch.shellypro2_ec62609eaa2c_output_0
