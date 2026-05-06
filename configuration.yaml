@@ -108,10 +108,6 @@ script:
   easee_mode_solar_only:
     alias: Easee Solar Only
     sequence:
-      - service: input_number.set_value
-        data:
-          entity_id: input_number.easee_dynamic_current
-          value: 0
       - service: input_select.select_option
         data:
           entity_id: input_select.easee_charging_mode
