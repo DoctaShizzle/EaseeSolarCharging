@@ -11,9 +11,10 @@
 		"id": "294f1bb2d7a8f191",
 		"type": "inject",
 		"z": "2baa1c2dec199298",
-		"name": "Every 30s",
+		"name": "Every 10s",
 		"props": [],
-		"repeat": "30",
+		"repeat": "10",
+		"crontab": "",
 		"once": true,
 		"onceDelay": "5",
 		"topic": "",
@@ -216,7 +217,7 @@
 		"action": "input_number.set_value",
 		"data": "{\"entity_id\": \"input_number.easee_dynamic_current\", \"value\": payload.new_current}",
 		"dataType": "jsonata",
-		"x": 2400,
+		"x": 2480,
 		"y": 640,
 		"wires": [
 			[]
@@ -344,7 +345,7 @@
 		"enableGlobalContextStore": false
 	},
 	{
-		"id": "7f0b57e62e5c8ddf",
+		"id": "8a91ff5e6198818a",
 		"type": "global-config",
 		"env": [],
 		"modules": {
