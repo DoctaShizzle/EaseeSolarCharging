@@ -24,16 +24,18 @@ Two physical buttons on a Shelly Pro 2 relay provide convenient local control, w
 
 This is the normal, always-on behaviour. It combines scheduled charging with opportunistic solar charging:
 
+The Brain tracks **combined P1 + battery power** (net household power). Every 30 seconds it calculates whether the house needs to import more, export less, or stay balanced—accounting for both grid flow and battery charge/discharge state. The charger is adjusted in small 1 A steps to reach a target net power position, preventing oscillation when conditions stabilize.
+
 1. **Inside a schedule window** — the current floors at the slot's configured `maxA`. From there:
-   - If the house is **exporting** solar surplus long enough, the current ramps **up** by 1 A per tick (toward `SOLAR_MAX_A`).
-   - If the house is **importing** AND the current is **above** the slot floor, it ramps **down** by 1 A per tick (back toward `slot.maxA`).
-   - If the grid is balanced (within the dead-band), the current stays unchanged.
+   - If the house is **exporting surplus** (P1 negative **and** batteries are helping), the current ramps **up** toward `SOLAR_MAX_A`.
+   - If the house is **importing too much** (P1 positive **or** batteries are draining), the current ramps **down** toward the floor.
+   - Small adjustments (< 1 A) are ignored to prevent jitter — only moves of ≥1 A are applied, allowing transient spikes to settle.
 
-2. **Outside every schedule window** — the floor drops to 0 A, but the solar tracking still runs:
-   - If there is sufficient solar export, the current ramps up exactly as it would inside a window.
-   - When solar disappears (import sustained for 5 min), it ramps back down to 0 A and the car pauses.
+2. **Outside every schedule window** — the floor drops to 0 A, but the solar+battery tracking still runs:
+   - If there is sufficient combined export, the current ramps up.
+   - When export is insufficient, the current ramps back down to 0 A and the car pauses.
 
-The schedule floor (`slot.maxA`) is guaranteed during windows — the schedule rate is always met even when clouds appear.
+The schedule floor (`slot.maxA`) is guaranteed during windows — the schedule rate is always met even when clouds appear or batteries are in use.
 
 | Day type | Default window(s) | Floor (maxA) |
 |---|---|---|
@@ -80,7 +82,7 @@ The buttons send `shelly.click` events to Home Assistant, which trigger automati
 ## Architecture
 
 ```
-[Every 60s]
+[Every 30s]
     
     
 [Get mode]    input_select.easee_charging_mode
@@ -89,14 +91,16 @@ The buttons send `shelly.click` events to Home Assistant, which trigger automati
 [Car connected?]    sensor.easee_charger_status
       (not connected  stop)
     
-[Get P1 power (W)]    sensor.p1_meter_power_import_power (5-min history)
-    
+[Get P1 power (W)]    sensor.p1_meter_power_import_power (instant reading)
+[Get battery power (W)]    sensor.marstek_power (instant reading)
     
 [Get current setpoint (A)]    input_number.easee_dynamic_current
     
     
 [Brain  all config & logic]
-    
+  Combines: netPower = P1 - Battery
+  Targets: TARGET_NET_W
+  Limits: ±1A per cycle, ±1A dead-band
     
 [easee.set_circuit_dynamic_limit]
     
@@ -156,21 +160,18 @@ const SOLAR_ONLY_MAX_A = 32;
 // Set this to your IANA timezone name so the schedule follows wall-clock time.
 const TIMEZONE = 'Europe/Brussels';
 
-// Target net export in watts. The algorithm aims to keep the house exporting
-// exactly this many watts after adjusting the charging current.
-const SOLAR_MARGIN_W = 400;
+// Target net power (P1 + Marstek combined) in watts.
+// Algorithm balances charger + batteries to achieve this net position.
+// -100 = aim for 100W available margin; charger responds fastest, batteries absorb spikes.
+const TARGET_NET_W = -100;
 
 // Mains voltage used to convert watts to amps. 230 V for single-phase Europe.
 const PHASE_VOLTAGE = 230;
 
-// Sliding window size in minutes. P1 readings are averaged over this period
-// before computing the new charging current.
-const WINDOW_MINUTES = 5;
-
-// Hysteresis: consecutive ticks required before ramping UP or DOWN.
-// Each tick is 30 s, so 10 ticks = 5 minutes of sustained condition before acting.
-// Both directions use the same value so the system is symmetric and stable.
-const HYSTERESIS_TICKS = 10;
+// Gradient limit: maximum current change per 30-second cycle (amps).
+// 1 A per cycle = smooth ramps. Batteries absorb cloud spikes/transients.
+// Increase for faster response (more jitter), decrease for more stability.
+const MAX_CHANGE_PER_CYCLE = 1;
 ```
 
 **Adding a schedule slot** (e.g. weekday evenings 20:0022:00 at 10 A):
@@ -213,25 +214,48 @@ const SCHEDULE_WEEKDAY = [
 
 ---
 
-## How solar control works
+## How solar + battery control works
 
-The P1 smart meter reports signed power in watts:
+The algorithm runs every 30 seconds and reads **both P1 power (grid) and battery power (Marstek) instantly**. It treats them as a combined system:
 
+### P1 Power (grid)
 - **Positive** = the house is importing from the grid
 - **Negative** = the house is exporting to the grid (solar surplus)
 
-The algorithm runs every 60 seconds and computes a time-weighted average of P1 power over the past 5 minutes to smooth out fluctuations, then adjusts by up to 1 A per tick based on that average:
+### Battery Power (Marstek)
+- **Positive** = batteries are charging (consuming household power)
+- **Negative** = batteries are discharging (supplying household power)
+
+### Combined Net Power
+```
+netPower = P1 − Battery
+```
+
+This interpretation means:
+- P1 = −500W (exporting) + Battery = +300W (charging) → netPower = −800W (strong export signal → increase charger)
+- P1 = +500W (importing) + Battery = −300W (discharging) → netPower = +800W (strong import signal → decrease charger)
+
+### Adjustment Logic
+
+Every 30 seconds, the Brain calculates the ideal current change needed to reach `TARGET_NET_W`:
+
+```
+idealDeltaA = (TARGET_NET_W − netPower) / PHASE_VOLTAGE
+limitedDeltaA = (abs(idealDeltaA) < 1A) ? 0 : clamp(idealDeltaA, −MAX_CHANGE_PER_CYCLE, +MAX_CHANGE_PER_CYCLE)
+```
 
 | Condition | Action |
 |---|---|
-| Avg P1 < −400 W (exporting surplus) | Current increases by 1 A (toward ceiling) |
-| Avg P1 > +400 W (importing from grid) | Current decreases by 1 A (toward floor) |
-| Avg P1 within ±400 W (dead-band) | **Current stays unchanged** — stable hysteresis |
+| netPower far above target (strong import) | Current decreases by 1 A (toward floor) |
+| netPower far below target (strong export) | Current increases by 1 A (toward ceiling) |
+| netPower close to target (within ±230W) | **Current stays unchanged** — 1A dead-band prevents jitter |
 | Floor limit (Default) | `slot.maxA` inside schedule window; 0 A outside |
 | Ceiling limit (Default & Solar only) | `SOLAR_MAX_A` and `SOLAR_ONLY_MAX_A` respectively |
 
-The 400 W dead-band prevents oscillation. A counter only resets when the **opposite** extreme is seen — a brief dip into the dead-band (cloud shadow, kettle switching on) does not wipe accumulated progress. This means the system ramps correctly on a normal variable-solar day rather than requiring an unbroken 5-minute block of clean export. The setpoint is stored in `input_number.easee_dynamic_current` so the UI shows the live target and the value survives a Node-RED restart.
+The **1 A dead-band** prevents oscillation when the house is close to target. Brief cloud shadows or battery fluctuations won't trigger charger changes — only sustained deviation does.
 
-**Default mode** floors at `slot.maxA` during schedule windows — the car always charges at least at the configured schedule rate, even when clouds appear. Outside windows the floor is 0 A, so the car only charges if solar is actually available.
+The setpoint is stored in `input_number.easee_dynamic_current` so the UI shows the live target and the value survives a Node-RED restart.
 
-**Solar only mode** also allows 0 A floor — the car halts completely when there is nothing to give, and restarts automatically when solar returns.
+**Default mode** floors at `slot.maxA` during schedule windows — the car always charges at least at the configured schedule rate, even when clouds appear or batteries are charging. Outside windows the floor is 0 A, so the car only charges if there is sufficient combined surplus.
+
+**Solar only mode** also allows 0 A floor — the car halts completely when there is insufficient surplus, and restarts automatically when it returns.
