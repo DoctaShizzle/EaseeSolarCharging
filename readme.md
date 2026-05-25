@@ -12,7 +12,7 @@ The Easee built-in schedule is **disabled**. Node-RED takes full control of when
 - **Boost**  session-only: charges at maximum speed immediately, regardless of schedule or solar. Resets to Default when the car unplugs.
 - **Solar only**  session-only: follows solar export only, pausing completely when there is nothing to give. Resets to Default when the car unplugs.
 
-Every 60 seconds Node-RED evaluates the current mode and adjusts the Easee dynamic current limit accordingly.
+Every 10 seconds Node-RED evaluates the current mode and adjusts the Easee dynamic current limit accordingly.
 
 Two physical buttons on a Shelly Pro 2 relay provide convenient local control, with LEDs indicating the active mode.
 
@@ -24,16 +24,18 @@ Two physical buttons on a Shelly Pro 2 relay provide convenient local control, w
 
 This is the normal, always-on behaviour. It combines scheduled charging with opportunistic solar charging:
 
-The Brain tracks **combined P1 + battery power** (net household power). Every 30 seconds it calculates whether the house needs to import more, export less, or stay balanced—accounting for both grid flow and battery charge/discharge state. The charger is adjusted in small 1 A steps to reach a target net power position, preventing oscillation when conditions stabilize.
+The Brain tracks **combined P1 + battery power** (net household power). Every 10 seconds it calculates whether the house needs to import more, export less, or stay balanced—accounting for both grid flow and battery charge/discharge state. The charger is adjusted in small 1 A steps to reach a target net power position, preventing oscillation when conditions stabilize.
 
 1. **Inside a schedule window** — the current floors at the slot's configured `maxA`. From there:
    - If the house is **exporting surplus** (P1 negative **and** batteries are helping), the current ramps **up** toward `SOLAR_MAX_A`.
    - If the house is **importing too much** (P1 positive **or** batteries are draining), the current ramps **down** toward the floor.
    - Small adjustments (< 1 A) are ignored to prevent jitter — only moves of ≥1 A are applied, allowing transient spikes to settle.
 
-2. **Outside every schedule window** — the floor drops to 0 A, but the solar+battery tracking still runs:
-   - If there is sufficient combined export, the current ramps up.
-   - When export is insufficient, the current ramps back down to 0 A and the car pauses.
+2. **Outside every schedule window** — the floor drops to 0 A, but the solar+battery tracking still runs with **EV-minimum hysteresis** (`CAR_MIN_A`, default 6 A):
+   - The car either charges at ≥ `CAR_MIN_A` or not at all — values 1–5 A are never commanded (the car ignores them anyway).
+   - **OFF → ON**: only when surplus can sustain `CAR_MIN_A` (i.e. `idealDeltaA ≥ CAR_MIN_A`, meaning ≥ 1380 W of net export beyond target).
+   - **ON → OFF**: only when the unclamped ideal target drops to 0 or below (real sustained deficit).
+   - Between those thresholds the charger **holds** at its current level — no oscillation.
 
 The schedule floor (`slot.maxA`) is guaranteed during windows — the schedule rate is always met even when clouds appear or batteries are in use.
 
@@ -60,7 +62,8 @@ Tracks solar export with no schedule floor  the current can go all the way down 
 
 When the Easee charger status changes to a non-connected state (e.g. car unplugged, standby), a state-change trigger in Node-RED fires and:
 1. Resets `input_select.easee_charging_mode` to **Default**.
-2. Resets `input_number.easee_dynamic_current` to 6 A (the EV minimum), ready for the next session.
+2. Resets `input_number.easee_dynamic_current` to **0 A** (off), ready for the next session.
+3. Sends 0 A to the Easee circuit dynamic limit.
 
 This means pressing **Boost** or **Solar only** is always a "this session" decision  you never have to remember to reset it.
 
@@ -82,29 +85,26 @@ The buttons send `shelly.click` events to Home Assistant, which trigger automati
 ## Architecture
 
 ```
-[Every 30s]
-    
-    
+[Every 10s]
+    ↓
 [Get mode]    input_select.easee_charging_mode
-    
-    
+    ↓
 [Car connected?]    sensor.easee_charger_status
-      (not connected  stop)
-    
+      (not connected → stop)
+    ↓
 [Get P1 power (W)]    sensor.p1_meter_power_import_power (instant reading)
-[Get battery power (W)]    sensor.marstek_power (instant reading)
-    
+[Get battery power (W)]    sensor.marstek_power_import (instant reading)
+    ↓
 [Get current setpoint (A)]    input_number.easee_dynamic_current
-    
-    
-[Brain  all config & logic]
-  Combines: netPower = P1 - Battery
+    ↓
+[Brain — all config & logic]
+  Combines: netPower = P1 − Battery
   Targets: TARGET_NET_W
   Limits: ±1A per cycle, ±1A dead-band
-    
+  Hysteresis: CAR_MIN_A on/off threshold
+    ↓
 [easee.set_circuit_dynamic_limit]
-    
-    
+    ↓
 [input_number.set_value]  (keep HA helper in sync)
 
 
@@ -112,8 +112,9 @@ The buttons send `shelly.click` events to Home Assistant, which trigger automati
          |
      (connected)                  (disconnected)
          |                              |
-[immediate evaluation]      [Reset mode  Default]
-                            [Reset setpoint  6 A]
+[immediate evaluation]      [Reset mode → Default]
+                            [Reset setpoint → 0 A]
+                            [Reset Easee limit → 0 A]
 ```
 
 The **Brain** function node is the single place where all behaviour is defined. All configurable parameters are constants at the top of that node.
@@ -168,10 +169,16 @@ const TARGET_NET_W = -100;
 // Mains voltage used to convert watts to amps. 230 V for single-phase Europe.
 const PHASE_VOLTAGE = 230;
 
-// Gradient limit: maximum current change per 30-second cycle (amps).
+// Gradient limit: maximum current change per 10-second cycle (amps).
 // 1 A per cycle = smooth ramps. Batteries absorb cloud spikes/transients.
 // Increase for faster response (more jitter), decrease for more stability.
 const MAX_CHANGE_PER_CYCLE = 1;
+
+// EV minimum charging current (amps).
+// The car won't charge below this — values 1–5 A are the same as 0 in practice.
+// OFF → ON:  only when surplus can sustain CAR_MIN_A.
+// ON  → OFF: only when unclamped ideal target ≤ 0.
+const CAR_MIN_A = 6;
 ```
 
 **Adding a schedule slot** (e.g. weekday evenings 20:0022:00 at 10 A):
@@ -192,7 +199,7 @@ const SCHEDULE_WEEKDAY = [
 |---|---|
 | `configuration.yaml` | Home Assistant helpers (`input_select`, `input_number`), mode-change scripts, Shelly button event automations, and LED sync logic. Merge into your `configuration.yaml`. |
 | `ui.yaml` | Lovelace card definition  three mode buttons plus charger sensors. Paste into a manual card. |
-| `nodered-flow.json` | Node-RED flow with the 60-second evaluation cycle and Brain logic. Import via *Menu  Import* in Node-RED. |
+| `nodered-flow.json` | Node-RED flow with the 10-second evaluation cycle and Brain logic. Import via *Menu → Import* in Node-RED. |
 
 ---
 
@@ -216,7 +223,7 @@ const SCHEDULE_WEEKDAY = [
 
 ## How solar + battery control works
 
-The algorithm runs every 30 seconds and reads **both P1 power (grid) and battery power (Marstek) instantly**. It treats them as a combined system:
+The algorithm runs every 10 seconds and reads **both P1 power (grid) and battery power (Marstek) instantly**. It treats them as a combined system:
 
 ### P1 Power (grid)
 - **Positive** = the house is importing from the grid
@@ -237,7 +244,7 @@ This interpretation means:
 
 ### Adjustment Logic
 
-Every 30 seconds, the Brain calculates the ideal current change needed to reach `TARGET_NET_W`:
+Every 10 seconds, the Brain calculates the ideal current change needed to reach `TARGET_NET_W`:
 
 ```
 idealDeltaA = (TARGET_NET_W − netPower) / PHASE_VOLTAGE
@@ -253,6 +260,19 @@ limitedDeltaA = (abs(idealDeltaA) < 1A) ? 0 : clamp(idealDeltaA, −MAX_CHANGE_P
 | Ceiling limit (Default & Solar only) | `SOLAR_MAX_A` and `SOLAR_ONLY_MAX_A` respectively |
 
 The **1 A dead-band** prevents oscillation when the house is close to target. Brief cloud shadows or battery fluctuations won't trigger charger changes — only sustained deviation does.
+
+### EV-minimum hysteresis (`CAR_MIN_A`)
+
+Outside schedule windows (floor = 0 A), the car's physical minimum charging current creates a step function: it either draws ≥ `CAR_MIN_A` × 230 V or nothing. The algorithm handles this with hysteresis:
+
+| Transition | Condition | Effect |
+|---|---|---|
+| OFF → ON | `idealDeltaA ≥ CAR_MIN_A` (surplus ≥ 1380 W) | Jump directly to `CAR_MIN_A` |
+| ON → hold | target in dead zone [1, `CAR_MIN_A`−1] but ideal > 0 | Stay at `CAR_MIN_A` |
+| ON → OFF | unclamped ideal target ≤ 0 | Drop to 0 A |
+| Never | set 1–5 A | Dead zone eliminated |
+
+This prevents the classic oscillation where the car repeatedly starts and stops because partial surplus (e.g. 300 W) can't sustain the car's minimum draw (1380 W).
 
 The setpoint is stored in `input_number.easee_dynamic_current` so the UI shows the live target and the value survives a Node-RED restart.
 
