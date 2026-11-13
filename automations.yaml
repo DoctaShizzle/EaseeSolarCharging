@@ -1,0 +1,289 @@
+# charging automations
+
+# Automations to toggle modes from Shelly button presses
+- id: shelly_input0_btn_down_toggle_solar
+  alias: "Shelly Input 0 btn_down toggles Solar mode"
+  mode: single
+  trigger:
+    - platform: event
+      event_type: shelly.click
+  condition:
+    - condition: template
+      value_template: >
+        {% set d = trigger.event.data %}
+        {% if (d.device|string).lower() != 'shellypro2-ec62609eaa2c' %}
+          {{ false }}
+        {% else %}
+          {{ (d.click_type|string).lower() == 'btn_down' and (d.channel is not none and (d.channel|int) == 1) }}
+        {% endif %}
+  action:
+    - choose:
+        - conditions:
+            - condition: state
+              entity_id: input_select.easee_charging_mode
+              state: "Solar only"
+          sequence:
+            - service: script.easee_mode_default
+        - conditions:
+            - condition: state
+              entity_id: input_select.easee_charging_mode
+              state: "Boost"
+          sequence:
+            - service: script.easee_mode_solar_only
+      default:
+        - service: script.easee_mode_solar_only
+
+- id: shelly_input1_btn_down_toggle_boost
+  alias: "Shelly Input 1 btn_down toggles Boost mode"
+  mode: single
+  trigger:
+    - platform: event
+      event_type: shelly.click
+  condition:
+    - condition: template
+      value_template: >
+        {% set d = trigger.event.data %}
+        {% if (d.device|string).lower() != 'shellypro2-ec62609eaa2c' %}
+          {{ false }}
+        {% else %}
+          {{ (d.click_type|string).lower() == 'btn_down' and (d.channel is not none and (d.channel|int) == 2) }}
+        {% endif %}
+  action:
+    - choose:
+        - conditions:
+            - condition: state
+              entity_id: input_select.easee_charging_mode
+              state: "Boost"
+          sequence:
+            - service: script.easee_mode_default
+        - conditions:
+            - condition: state
+              entity_id: input_select.easee_charging_mode
+              state: "Solar only"
+          sequence:
+            - service: script.easee_mode_boost
+      default:
+        - service: script.easee_mode_boost
+
+
+# Automations to keep Shelly outputs (LEDs) in sync with the selected mode
+- alias: "Sync Shelly outputs to Easee mode"
+  id: sync_shelly_outputs_to_easee_mode
+  trigger:
+    - platform: state
+      entity_id: input_select.easee_charging_mode
+    - platform: homeassistant
+      event: start
+  action:
+    - wait_template: >
+        {{ states('switch.shellypro2_ec62609eaa2c_output_0') not in ['unknown','unavailable'] and
+           states('switch.shellypro2_ec62609eaa2c_output_1') not in ['unknown','unavailable'] }}
+      timeout: '00:00:30'
+      continue_on_timeout: true
+    - choose:
+        - conditions:
+            - condition: state
+              entity_id: input_select.easee_charging_mode
+              state: "Default"
+          sequence:
+            - service: switch.turn_off
+              target:
+                entity_id:
+                  - switch.shellypro2_ec62609eaa2c_output_0
+                  - switch.shellypro2_ec62609eaa2c_output_1
+        - conditions:
+            - condition: state
+              entity_id: input_select.easee_charging_mode
+              state: "Solar only"
+          sequence:
+            - service: switch.turn_on
+              target:
+                entity_id: switch.shellypro2_ec62609eaa2c_output_0
+            - service: switch.turn_off
+              target:
+                entity_id: switch.shellypro2_ec62609eaa2c_output_1
+        - conditions:
+            - condition: state
+              entity_id: input_select.easee_charging_mode
+              state: "Boost"
+          sequence:
+            - service: switch.turn_on
+              target:
+                entity_id: switch.shellypro2_ec62609eaa2c_output_1
+            - service: switch.turn_off
+              target:
+                entity_id: switch.shellypro2_ec62609eaa2c_output_0
+
+# notification on car connect
+- id: easee_mode_choice_on_car_connect
+  alias: "Easee: choose a charging mode when a car connects"
+  description: >-
+    Sends an actionable notification to Home Assistant Companion App trackers
+    that are home when the charger detects a connected car. The first choice
+    applies; if nobody chooses, the current mode is left unchanged.
+  mode: restart
+  triggers:
+    - trigger: state
+      entity_id: sensor.easee_charger_status
+      from: "disconnected"
+      id: car_connected
+    - trigger: homeassistant
+      event: start
+      id: home_assistant_start
+  variables:
+    test_mode: >-
+      {{ trigger is not defined or trigger is none or trigger.get('platform') is none }}
+    connected_statuses:
+      - ready_to_charge
+      - awaiting_start
+      - charging
+      - completed
+    home_notify_services: >-
+      {% set ns = namespace(services=[]) %}
+      {% for entity_id in integration_entities('mobile_app') %}
+        {% if entity_id.startswith('device_tracker.') and is_state(entity_id, 'home') %}
+          {% set device_name = device_attr(entity_id, 'name') %}
+          {% if device_name %}
+            {% set ns.services = ns.services + ['notify.mobile_app_' ~ slugify(device_name)] %}
+          {% endif %}
+        {% endif %}
+      {% endfor %}
+      {{ ns.services | unique | list }}
+    notification_tag: easee_mode_choice
+  actions:
+    - variables:
+        action_default: "{{ 'EASEE_DEFAULT_' ~ context.id }}"
+        action_boost: "{{ 'EASEE_BOOST_' ~ context.id }}"
+        action_solar_only: "{{ 'EASEE_SOLAR_ONLY_' ~ context.id }}"
+    - if:
+        - condition: trigger
+          id: home_assistant_start
+      then:
+        - repeat:
+            for_each: "{{ home_notify_services }}"
+            sequence:
+              - action: "{{ repeat.item }}"
+                continue_on_error: true
+                data:
+                  message: clear_notification
+                  data:
+                    tag: "{{ notification_tag }}"
+        - stop: Cleared old mode-choice notifications after Home Assistant startup
+    - if:
+        - condition: template
+          value_template: "{{ home_notify_services | length == 0 }}"
+      then:
+        - stop: No Home Assistant Mobile App notification targets could be resolved for phones at home
+    - delay: "00:00:03"
+    - condition: template
+      value_template: >-
+        {{ test_mode or states('sensor.easee_charger_status') in connected_statuses }}
+    - repeat:
+        for_each: "{{ home_notify_services }}"
+        sequence:
+          - action: "{{ repeat.item }}"
+            continue_on_error: true
+            data:
+              title: >-
+                {{ "Test: choose a charging mode" if test_mode else "New charging session" }}
+              message: >-
+                {{ "This is a test. Choose Default, Boost, or Solar only; the charging mode will not change."
+                   if test_mode
+                   else "A car is connected to the Easee charger. Choose Default, Boost, or Solar only. Without a choice, the current mode stays unchanged." }}
+              data:
+                tag: "{{ notification_tag }}"
+                group: easee_charging
+                priority: high
+                ttl: 0
+                url: /lovelace/laden
+                clickAction: /lovelace/laden
+                actions:
+                  - action: "{{ action_default }}"
+                    title: Default
+                    authenticationRequired: true
+                  - action: "{{ action_boost }}"
+                    title: Boost
+                    authenticationRequired: true
+                  - action: "{{ action_solar_only }}"
+                    title: Solar only
+                    authenticationRequired: true
+    - wait_for_trigger:
+        - trigger: event
+          event_type: mobile_app_notification_action
+          event_data:
+            action: "{{ action_default }}"
+          id: default
+        - trigger: event
+          event_type: mobile_app_notification_action
+          event_data:
+            action: "{{ action_boost }}"
+          id: boost
+        - trigger: event
+          event_type: mobile_app_notification_action
+          event_data:
+            action: "{{ action_solar_only }}"
+          id: solar_only
+        - trigger: state
+          entity_id: sensor.easee_charger_status
+          to: "disconnected"
+          id: disconnected
+      timeout: "{{ '00:10:00' if test_mode else '24:00:00' }}"
+      continue_on_timeout: true
+    - repeat:
+        for_each: "{{ home_notify_services }}"
+        sequence:
+          - action: "{{ repeat.item }}"
+            continue_on_error: true
+            data:
+              message: clear_notification
+              data:
+                tag: "{{ notification_tag }}"
+    - if:
+        - condition: template
+          value_template: "{{ test_mode }}"
+      then:
+        - choose:
+            - conditions:
+                - condition: template
+                  value_template: >-
+                    {{ wait.completed and wait.trigger is not none and
+                       wait.trigger.id in ['default', 'boost', 'solar_only'] }}
+              sequence:
+                - action: persistent_notification.create
+                  data:
+                    notification_id: easee_mode_choice_test_result
+                    title: Mode-selection test succeeded
+                    message: >-
+                      Choice received:
+                      {{ {'default': 'Default', 'boost': 'Boost', 'solar_only': 'Solar only'}.get(wait.trigger.id, 'Unknown') }}.
+                      The charging mode was not changed.
+          default:
+            - action: persistent_notification.create
+              data:
+                notification_id: easee_mode_choice_test_result
+                title: Mode-selection test stopped
+                message: >-
+                  No choice was received during the test, or the car was
+                  disconnected. The charging mode was not changed.
+        - stop: Test completed without changing the charging mode
+    - condition: template
+      value_template: >-
+        {{ wait.completed and wait.trigger is not none
+           and wait.trigger.id in ['default', 'boost', 'solar_only']
+           and states('sensor.easee_charger_status') in connected_statuses }}
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ wait.trigger.id == 'default' }}"
+          sequence:
+            - action: script.easee_mode_default
+        - conditions:
+            - condition: template
+              value_template: "{{ wait.trigger.id == 'boost' }}"
+          sequence:
+            - action: script.easee_mode_boost
+        - conditions:
+            - condition: template
+              value_template: "{{ wait.trigger.id == 'solar_only' }}"
+          sequence:
+            - action: script.easee_mode_solar_only

@@ -1,64 +1,113 @@
 type: vertical-stack
 cards:
-  - type: entities
-    title: Car
-    show_header_toggle: false
-    entities:
-      - entity: sensor.wvwzzze1zpp038200_odometer
-        name: Odometer
-      - entity: sensor.wvwzzze1zpp038200_battery_cruising_range
-        name: Range
-      - entity: sensor.wvwzzze1zpp038200_battery_level
-        name: Battery
-      - entity: number.wvwzzze1zpp038200_battery_target_charge_level
-        name: Target
-      - entity: sensor.wvwzzze1zpp038200_charging_rate
-        name: Charging rate
-      - entity: sensor.wvwzzze1zpp038200_charging_time_left
-        name: Remaining charge time
-      - entity: sensor.wvwzzze1zpp038200_charging_power
-        name: Charging Power
-    visibility:
-      - condition: user
-        users:
-          - 63a3125913914e7dac4cb7dea10b35b4
   - type: vertical-stack
     cards:
+      - type: horizontal-stack
+        cards:
+          - type: vertical-stack
+            cards:
+              - type: conditional
+                conditions:
+                  - condition: state
+                    entity: sensor.easee_charging_mode_readonly
+                    state: "Default"
+                card:
+                  type: button
+                  show_name: true
+                  show_icon: true
+                  name: "✓ Default"
+                  icon: mdi:clock-outline
+                  tap_action:
+                    action: call-service
+                    service: script.easee_mode_default
+              - type: conditional
+                conditions:
+                  - condition: state
+                    entity: sensor.easee_charging_mode_readonly
+                    state_not: "Default"
+                card:
+                  type: button
+                  show_name: true
+                  show_icon: true
+                  name: Default
+                  icon: mdi:clock-outline
+                  tap_action:
+                    action: call-service
+                    service: script.easee_mode_default
+          - type: vertical-stack
+            cards:
+              - type: conditional
+                conditions:
+                  - condition: state
+                    entity: sensor.easee_charging_mode_readonly
+                    state: "Boost"
+                card:
+                  type: button
+                  show_name: true
+                  show_icon: true
+                  name: "✓ Boost"
+                  icon: mdi:flash
+                  tap_action:
+                    action: call-service
+                    service: script.easee_mode_boost
+              - type: conditional
+                conditions:
+                  - condition: state
+                    entity: sensor.easee_charging_mode_readonly
+                    state_not: "Boost"
+                card:
+                  type: button
+                  show_name: true
+                  show_icon: true
+                  name: Boost
+                  icon: mdi:flash
+                  tap_action:
+                    action: call-service
+                    service: script.easee_mode_boost
+          - type: vertical-stack
+            cards:
+              - type: conditional
+                conditions:
+                  - condition: state
+                    entity: sensor.easee_charging_mode_readonly
+                    state: "Solar only"
+                card:
+                  type: button
+                  show_name: true
+                  show_icon: true
+                  name: "✓ Solar only"
+                  icon: mdi:white-balance-sunny
+                  tap_action:
+                    action: call-service
+                    service: script.easee_mode_solar_only
+              - type: conditional
+                conditions:
+                  - condition: state
+                    entity: sensor.easee_charging_mode_readonly
+                    state_not: "Solar only"
+                card:
+                  type: button
+                  show_name: true
+                  show_icon: true
+                  name: Solar only
+                  icon: mdi:white-balance-sunny
+                  tap_action:
+                    action: call-service
+                    service: script.easee_mode_solar_only
       - type: entities
         title: Easee Charging Station
+        show_header_toggle: false
         entities:
           - entity: sensor.easee_charger_power
-            name: Car Charging Power
+            name: Power
           - entity: sensor.easee_charger_session_energy
-            name: Energy Session
+            name: Session Energy
           - entity: sensor.easee_charger_status
             name: Charger Status
           - entity: sensor.easee_charging_mode_readonly
             name: Mode
           - entity: sensor.easee_dynamic_current_readonly
             name: Dynamic Current
-      - type: horizontal-stack
-        cards:
-          - show_name: true
-            show_icon: true
-            type: button
-            name: Default
-            icon: mdi:clock-outline
-            tap_action:
-              action: call-service
-              service: script.easee_mode_default
-          - type: button
-            name: Boost
-            icon: mdi:flash
-            tap_action:
-              action: call-service
-              service: script.easee_mode_boost
-          - type: button
-            name: Solar only
-            icon: mdi:white-balance-sunny
-            tap_action:
-              action: call-service
-              service: script.easee_mode_solar_only
       - type: history-graph
         title: Easee – power & mode
         hours_to_show: 6
@@ -70,3 +119,19 @@ cards:
             name: Dynamic Current
           - entity: sensor.easee_charging_mode_readonly
             name: Mode
+      - type: entities
+        title: Charging Settings
+        show_header_toggle: false
+        entities:
+          - entity: schedule.easee_charging_schedule
+            name: Charging Schedule
+          - entity: input_number.easee_schedule_floor_a
+            name: Schedule Floor
+          - entity: input_number.easee_solar_max_a
+            name: Solar Maximum
+          - entity: input_number.easee_boost_max_a
+            name: Boost Maximum
+          - entity: input_number.easee_solar_only_min_a
+            name: Solar-only Minimum
+          - entity: input_number.easee_solar_only_max_a
+            name: Solar-only Maximum
