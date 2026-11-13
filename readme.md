@@ -26,7 +26,7 @@ When a car connects to the charger, a Home Assistant automation asks the phones 
 
 This is the normal, always-on behaviour. It combines scheduled charging with opportunistic solar charging:
 
-The Brain tracks **combined P1 + battery power** (net household power). Every 10 seconds it calculates whether the house needs to import more, export less, or stay balanced—accounting for both grid flow and battery charge/discharge state. The charger is adjusted in small 1 A steps to reach a target net power position, preventing oscillation when conditions stabilize.
+The Brain tracks **combined P1 + battery power** (net household power) by default. The `USE_MARSTEK_BATTERY` constant can disable battery input; when disabled, battery power is treated as 0 W and control uses P1 alone. Every 10 seconds it calculates whether the house needs to import more, export less, or stay balanced—accounting for both grid flow and battery charge/discharge state when enabled. The charger is adjusted in small 1 A steps to reach a target net power position, preventing oscillation when conditions stabilize.
 
 1. **Inside a schedule window** — `input_number.easee_schedule_floor_a` is the shared minimum current for every active schedule block. From there:
    - If combined `netPower` is **below `TARGET_NET_W`** (more surplus than the target), the current ramps **up** toward `input_number.easee_solar_max_a`.
@@ -106,7 +106,7 @@ The notification has **Default**, **Boost**, and **Solar only** actions. The fir
 [Get amperage settings]    input_number.easee_*
     ↓
 [Brain — control logic]
-  Combines: netPower = P1 − Battery
+  Combines: netPower = P1 − Battery (P1 alone when disabled)
   Targets: TARGET_NET_W
   Limits: ±1A per cycle, ±1A dead-band
   Hysteresis: CAR_MIN_A on/off threshold
@@ -151,7 +151,7 @@ The following `input_number` helpers are adjustable in Home Assistant and are sh
 
 ### Fixed tweakable constants
 
-The `Tweakable constants` function node at the start of the Node-RED flow holds the charger device ID, phase voltage, target net power, maximum current change per cycle, and EV minimum current. Edit those constants there rather than in the Brain. The schedule uses Home Assistant's timezone, so no Node-RED timezone constant is needed.
+The `Tweakable constants` function node at the start of the Node-RED flow holds the charger device ID, phase voltage, target net power, maximum current change per cycle, EV minimum current, and `USE_MARSTEK_BATTERY` (a boolean that defaults to `true`). Set it to `false` when there are no Marstek batteries; the Brain then uses 0 W for battery power and bases net power on P1 alone. Edit those constants there rather than in the Brain. The schedule uses Home Assistant's timezone, so no Node-RED timezone constant is needed.
 
 **Finding your device ID**: in Home Assistant go to *Settings → Devices & Services → Easee*, open your charger device, and copy the device ID from the URL.
 
@@ -191,7 +191,7 @@ The `Tweakable constants` function node at the start of the Node-RED flow holds 
 
 ## How solar + battery control works
 
-The algorithm runs every 10 seconds and reads P1 power (grid), battery power (Marstek), the Home Assistant setpoint helper, schedule state, and amperage settings. It treats the grid and battery readings as a combined system:
+The algorithm runs every 10 seconds and reads P1 power (grid), the Marstek battery power sensor, the Home Assistant setpoint helper, schedule state, and amperage settings. `USE_MARSTEK_BATTERY` defaults to `true`; if set to `false` in the `Tweakable constants` node, the Brain uses 0 W for battery power instead. Its combined-power calculation is:
 
 ### P1 Power (grid)
 - **Positive** = the house is importing from the grid
