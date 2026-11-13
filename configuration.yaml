@@ -58,13 +58,12 @@ template:
           {{ source not in ['', 'unknown', 'unavailable'] and states(source) not in ['unknown', 'unavailable'] }}
         state: "{{ states(states('input_text.easee_site_charger_status_entity')) }}"
 
-      # Normalize charger power to kW and session energy to kWh for dashboard display.
+      # Normalize and round only these display wrappers; source sensors keep full precision.
       - name: Easee Control Charger Power
         unique_id: easee_control_charger_power
-        device_class: power
         state_class: measurement
+        # Omit device_class so Home Assistant preserves kW instead of converting it to W.
         unit_of_measurement: kW
-        suggested_display_precision: 2
         availability: >
           {% set source = states('input_text.easee_site_charger_power_entity') %}
           {% set unit = state_attr(source, 'unit_of_measurement') %}
@@ -73,13 +72,12 @@ template:
           {% set source = states('input_text.easee_site_charger_power_entity') %}
           {% set value = states(source) | float %}
           {% set unit = state_attr(source, 'unit_of_measurement') %}
-          {{ value / 1000 if unit == 'W' else value }}
+          {{ (value / 1000 if unit == 'W' else value) | round(2) }}
 
       - name: Easee Control Charger Session Energy
         unique_id: easee_control_charger_session_energy
         device_class: energy
         unit_of_measurement: kWh
-        suggested_display_precision: 1
         availability: >
           {% set source = states('input_text.easee_site_charger_session_energy_entity') %}
           {% set unit = state_attr(source, 'unit_of_measurement') %}
@@ -88,7 +86,7 @@ template:
           {% set source = states('input_text.easee_site_charger_session_energy_entity') %}
           {% set value = states(source) | float %}
           {% set unit = state_attr(source, 'unit_of_measurement') %}
-          {{ value / 1000 if unit == 'Wh' else value }}
+          {{ (value / 1000 if unit == 'Wh' else value) | round(1) }}
 
       - name: Easee Control P1 Power
         unique_id: easee_control_p1_power
