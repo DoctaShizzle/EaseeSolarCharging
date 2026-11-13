@@ -1,5 +1,268 @@
 # charging automations
 
+# Fixed controller constants. Update the site-specific entity IDs and device IDs
+# only in the input_text mapping in configuration.yaml when installing.
+- id: easee_initialize_charging_settings
+  alias: "Easee: initialize charging settings once"
+  description: >-
+    Seed the five adjustable amperage helpers with the former Node-RED defaults
+    only while the initialization marker is off; later user changes are preserved.
+  mode: single
+  triggers:
+    - trigger: time_pattern
+      seconds: "/10"
+    - trigger: homeassistant
+      event: start
+    - trigger: state
+      entity_id: input_boolean.easee_charging_settings_initialized
+      to: "off"
+  actions:
+    - choose:
+        - conditions:
+            - condition: state
+              entity_id: input_boolean.easee_charging_settings_initialized
+              state: "on"
+          sequence:
+            - stop: Charging settings were already initialized
+        - conditions:
+            - condition: state
+              entity_id: input_boolean.easee_charging_settings_initialized
+              state: "off"
+          sequence:
+            - action: input_number.set_value
+              target:
+                entity_id: input_number.easee_schedule_floor_a
+              data:
+                value: 6
+            - action: input_number.set_value
+              target:
+                entity_id: input_number.easee_solar_max_a
+              data:
+                value: 32
+            - action: input_number.set_value
+              target:
+                entity_id: input_number.easee_boost_max_a
+              data:
+                value: 32
+            - action: input_number.set_value
+              target:
+                entity_id: input_number.easee_solar_only_min_a
+              data:
+                value: 0
+            - action: input_number.set_value
+              target:
+                entity_id: input_number.easee_solar_only_max_a
+              data:
+                value: 32
+            - action: input_boolean.turn_on
+              target:
+                entity_id: input_boolean.easee_charging_settings_initialized
+            - action: persistent_notification.dismiss
+              data:
+                notification_id: easee_settings_initialization_error
+      default:
+        - action: persistent_notification.create
+          data:
+            notification_id: easee_settings_initialization_error
+            title: Easee settings were not initialized
+            message: >-
+              The charging-settings initialization marker is unavailable or
+              invalid. Check input_boolean.easee_charging_settings_initialized.
+
+- id: easee_home_assistant_charging_controller
+  alias: "Easee: Home Assistant charging controller"
+  description: >-
+    Replaces the Node-RED control loop. Every 10 seconds it validates inputs,
+    calculates netPower as P1 minus Marstek, applies the schedule floor or mode
+    limit with the 1 A dead-band and EV-minimum hysteresis, then writes Easee
+    and synchronizes the commanded-current helper. Invalid inputs cause a
+    persistent notification and no charger write.
+  mode: single
+  variables:
+    phase_voltage_v: 230      # Power-to-current conversion used by the existing controller.
+    target_net_power_w: -100  # Desired combined P1-minus-Marstek power in watts.
+    max_change_per_cycle_a: 1 # Maximum current ramp per 10-second run.
+    car_minimum_current_a: 6  # EV minimum-current start/stop hysteresis threshold.
+    use_marstek_battery: true # Set false to use P1 alone when no Marstek power source is configured.
+  triggers:
+    - trigger: time_pattern
+      seconds: "/10"
+    - trigger: state
+      entity_id: sensor.easee_control_charger_status
+      for: "00:00:10"
+    - trigger: homeassistant
+      event: start
+    - trigger: state
+      entity_id: input_boolean.easee_charging_settings_initialized
+      to: "on"
+  conditions:
+    - condition: state
+      entity_id: input_boolean.easee_charging_settings_initialized
+      state: "on"
+    - condition: template
+      value_template: >
+        {{ states('sensor.easee_control_charger_status') in
+           ['ready_to_charge', 'awaiting_start', 'charging', 'completed'] and
+           (as_timestamp(now()) -
+            as_timestamp(states['sensor.easee_control_charger_status'].last_changed)) >= 10 }}
+  actions:
+    - variables:
+        charger_device_id: "{{ states('input_text.easee_site_charger_device_id') }}"
+        current_mode: "{{ states('input_select.easee_charging_mode') }}"
+        p1_power_raw: "{{ states('sensor.easee_control_p1_power') }}"
+        marstek_power_raw: >-
+          {{ states('sensor.marstek_power_import') if use_marstek_battery else '0' }}
+        current_setpoint_raw: "{{ states('input_number.easee_dynamic_current') }}"
+        schedule_state: "{{ states('schedule.easee_charging_schedule') }}"
+        schedule_floor_raw: "{{ states('input_number.easee_schedule_floor_a') }}"
+        solar_max_raw: "{{ states('input_number.easee_solar_max_a') }}"
+        boost_max_raw: "{{ states('input_number.easee_boost_max_a') }}"
+        solar_only_min_raw: "{{ states('input_number.easee_solar_only_min_a') }}"
+        solar_only_max_raw: "{{ states('input_number.easee_solar_only_max_a') }}"
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: >
+                {{ (charger_device_id | trim) not in ['', 'unknown', 'unavailable'] and
+                   is_number(p1_power_raw) and is_number(marstek_power_raw) and
+                   is_number(current_setpoint_raw) and
+                   phase_voltage_v > 0 and max_change_per_cycle_a > 0 and
+                   car_minimum_current_a >= 1 and car_minimum_current_a <= 32 and
+                   current_mode in ['Default', 'Boost', 'Solar only'] and
+                   (
+                     (current_mode == 'Default' and
+                      schedule_state in ['on', 'off'] and
+                      is_number(schedule_floor_raw) and
+                      (schedule_floor_raw | float) >= 0 and
+                      (schedule_floor_raw | float) <= 32 and
+                      is_number(solar_max_raw) and
+                      (solar_max_raw | float) >= 0 and
+                      (solar_max_raw | float) <= 32)
+                     or
+                     (current_mode == 'Boost' and
+                      is_number(boost_max_raw) and
+                      (boost_max_raw | float) >= 0 and
+                      (boost_max_raw | float) <= 32)
+                     or
+                     (current_mode == 'Solar only' and
+                      is_number(solar_only_min_raw) and
+                      is_number(solar_only_max_raw) and
+                      (solar_only_min_raw | float) >= 0 and
+                      (solar_only_max_raw | float) <= 32 and
+                      (solar_only_min_raw | float) <= (solar_only_max_raw | float))
+                   ) }}
+          sequence:
+            # Keep rounding, clamping, dead-band, and EV-minimum hysteresis aligned with the previous Node-RED Brain.
+            - variables:
+                new_current: >
+                  {% if current_mode == 'Boost' %}
+                    {{ boost_max_raw | float }}
+                  {% else %}
+                    {% set p1_power = p1_power_raw | float %}
+                    {% set marstek_power = marstek_power_raw | float %}
+                    {% set setpoint = current_setpoint_raw | float %}
+                    {% set ideal_delta = (target_net_power_w - (p1_power - marstek_power)) / phase_voltage_v %}
+                    {% if (ideal_delta | abs) < 1 %}
+                      {% set limited_delta = 0 %}
+                    {% else %}
+                      {% set rounded_delta = ((ideal_delta + 0.5) | round(0, 'floor') | int) %}
+                      {% set limited_delta = [max_change_per_cycle_a, [-max_change_per_cycle_a, rounded_delta] | max] | min %}
+                    {% endif %}
+                    {% if current_mode == 'Default' %}
+                      {% set floor_a = schedule_floor_raw | float if schedule_state == 'on' else 0 %}
+                      {% set ceiling_a = [solar_max_raw | float, floor_a] | max %}
+                    {% else %}
+                      {% set floor_a = solar_only_min_raw | float %}
+                      {% set ceiling_a = solar_only_max_raw | float %}
+                    {% endif %}
+                    {% if floor_a >= car_minimum_current_a %}
+                      {% set rounded_target = ((setpoint + limited_delta + 0.5) | round(0, 'floor') | int) %}
+                      {{ [floor_a, [ceiling_a, rounded_target] | min] | max }}
+                    {% elif setpoint >= car_minimum_current_a %}
+                      {% set rounded_target = ((setpoint + limited_delta + 0.5) | round(0, 'floor') | int) %}
+                      {% set target_a = [floor_a, [ceiling_a, rounded_target] | min] | max %}
+                      {% if target_a > 0 and target_a < car_minimum_current_a %}
+                        {{ 0 if setpoint + ideal_delta <= 0 else car_minimum_current_a }}
+                      {% else %}
+                        {{ target_a }}
+                      {% endif %}
+                    {% else %}
+                      {{ car_minimum_current_a if ideal_delta >= car_minimum_current_a else 0 }}
+                    {% endif %}
+                  {% endif %}
+            - action: easee.set_circuit_dynamic_limit
+              data:
+                device_id: "{{ charger_device_id }}"
+                current_p1: "{{ new_current | float }}"
+                time_to_live: 0
+            - action: input_number.set_value
+              target:
+                entity_id: input_number.easee_dynamic_current
+              data:
+                value: "{{ new_current | float }}"
+            - action: persistent_notification.dismiss
+              data:
+                notification_id: easee_charging_control_error
+      default:
+        - action: persistent_notification.create
+          data:
+            notification_id: easee_charging_control_error
+            title: Easee charging controller skipped an update
+            message: >-
+              A required control input, site mapping, schedule state, or mode
+              setting is unavailable or invalid. No new current limit was
+              applied. Check the P1/Marstek readings and charging helpers.
+
+- id: easee_reset_charging_on_disconnect
+  alias: "Easee: reset charging state after disconnect"
+  description: >-
+    After the charger has been disconnected for 10 seconds, reset the mode,
+    commanded-current helper, and Easee dynamic limit. The configured charger
+    device ID is validated before the Easee reset call.
+  mode: single
+  variables:
+    charger_device_id: "{{ states('input_text.easee_site_charger_device_id') }}"
+  triggers:
+    - trigger: state
+      entity_id: sensor.easee_control_charger_status
+      for: "00:00:10"
+  conditions:
+    - condition: template
+      value_template: >
+        {{ states('sensor.easee_control_charger_status') not in
+           ['ready_to_charge', 'awaiting_start', 'charging', 'completed'] }}
+  actions:
+    - action: input_select.select_option
+      target:
+        entity_id: input_select.easee_charging_mode
+      data:
+        option: "Default"
+    - action: input_number.set_value
+      target:
+        entity_id: input_number.easee_dynamic_current
+      data:
+        value: 0
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: >
+                {{ (charger_device_id | trim) not in ['', 'unknown', 'unavailable'] }}
+          sequence:
+            - action: easee.set_circuit_dynamic_limit
+              data:
+                device_id: "{{ charger_device_id }}"
+                current_p1: 0
+                time_to_live: 0
+      default:
+        - action: persistent_notification.create
+          data:
+            notification_id: easee_charging_control_error
+            title: Easee disconnect reset was incomplete
+            message: >-
+              The charging mode and local setpoint were reset, but the
+              Easee dynamic limit could not be cleared because the
+              configured charger device ID is unavailable.
+
 # Automations to toggle modes from Shelly button presses
 - id: shelly_input0_btn_down_toggle_solar
   alias: "Shelly Input 0 btn_down toggles Solar mode"
@@ -11,7 +274,8 @@
     - condition: template
       value_template: >
         {% set d = trigger.event.data %}
-        {% if (d.device|string).lower() != 'shellypro2-ec62609eaa2c' %}
+        {% set configured_device = states('input_text.easee_site_shelly_device_id') | lower %}
+        {% if (d.device|string).lower() != configured_device %}
           {{ false }}
         {% else %}
           {{ (d.click_type|string).lower() == 'btn_down' and (d.channel is not none and (d.channel|int) == 1) }}
@@ -43,7 +307,8 @@
     - condition: template
       value_template: >
         {% set d = trigger.event.data %}
-        {% if (d.device|string).lower() != 'shellypro2-ec62609eaa2c' %}
+        {% set configured_device = states('input_text.easee_site_shelly_device_id') | lower %}
+        {% if (d.device|string).lower() != configured_device %}
           {{ false }}
         {% else %}
           {{ (d.click_type|string).lower() == 'btn_down' and (d.channel is not none and (d.channel|int) == 2) }}
@@ -66,7 +331,8 @@
         - service: script.easee_mode_boost
 
 
-# Automations to keep Shelly outputs (LEDs) in sync with the selected mode
+# Keep both Shelly LEDs synchronized with the selected mode. Entity IDs come
+# from configuration.yaml; a missing output entity is reported by the timeout.
 - alias: "Sync Shelly outputs to Easee mode"
   id: sync_shelly_outputs_to_easee_mode
   trigger:
@@ -76,43 +342,63 @@
       event: start
   action:
     - wait_template: >
-        {{ states('switch.shellypro2_ec62609eaa2c_output_0') not in ['unknown','unavailable'] and
-           states('switch.shellypro2_ec62609eaa2c_output_1') not in ['unknown','unavailable'] }}
+        {% set output_0 = states('input_text.easee_site_shelly_output_0_entity') %}
+        {% set output_1 = states('input_text.easee_site_shelly_output_1_entity') %}
+        {{ output_0 not in ['', 'unknown', 'unavailable'] and
+           output_1 not in ['', 'unknown', 'unavailable'] and
+           states(output_0) not in ['unknown', 'unavailable'] and
+           states(output_1) not in ['unknown', 'unavailable'] }}
       timeout: '00:00:30'
       continue_on_timeout: true
-    - choose:
-        - conditions:
-            - condition: state
-              entity_id: input_select.easee_charging_mode
-              state: "Default"
-          sequence:
-            - service: switch.turn_off
-              target:
-                entity_id:
-                  - switch.shellypro2_ec62609eaa2c_output_0
-                  - switch.shellypro2_ec62609eaa2c_output_1
-        - conditions:
-            - condition: state
-              entity_id: input_select.easee_charging_mode
-              state: "Solar only"
-          sequence:
-            - service: switch.turn_on
-              target:
-                entity_id: switch.shellypro2_ec62609eaa2c_output_0
-            - service: switch.turn_off
-              target:
-                entity_id: switch.shellypro2_ec62609eaa2c_output_1
-        - conditions:
-            - condition: state
-              entity_id: input_select.easee_charging_mode
-              state: "Boost"
-          sequence:
-            - service: switch.turn_on
-              target:
-                entity_id: switch.shellypro2_ec62609eaa2c_output_1
-            - service: switch.turn_off
-              target:
-                entity_id: switch.shellypro2_ec62609eaa2c_output_0
+    - if:
+        - condition: template
+          value_template: "{{ wait.completed }}"
+      then:
+        - choose:
+            - conditions:
+                - condition: state
+                  entity_id: input_select.easee_charging_mode
+                  state: "Default"
+              sequence:
+                - service: switch.turn_off
+                  data:
+                    entity_id: "{{ states('input_text.easee_site_shelly_output_0_entity') }}"
+                - service: switch.turn_off
+                  data:
+                    entity_id: "{{ states('input_text.easee_site_shelly_output_1_entity') }}"
+            - conditions:
+                - condition: state
+                  entity_id: input_select.easee_charging_mode
+                  state: "Solar only"
+              sequence:
+                - service: switch.turn_on
+                  data:
+                    entity_id: "{{ states('input_text.easee_site_shelly_output_0_entity') }}"
+                - service: switch.turn_off
+                  data:
+                    entity_id: "{{ states('input_text.easee_site_shelly_output_1_entity') }}"
+            - conditions:
+                - condition: state
+                  entity_id: input_select.easee_charging_mode
+                  state: "Boost"
+              sequence:
+                - service: switch.turn_on
+                  data:
+                    entity_id: "{{ states('input_text.easee_site_shelly_output_1_entity') }}"
+                - service: switch.turn_off
+                  data:
+                    entity_id: "{{ states('input_text.easee_site_shelly_output_0_entity') }}"
+        - service: persistent_notification.dismiss
+          data:
+            notification_id: easee_shelly_outputs_error
+      else:
+        - service: persistent_notification.create
+          data:
+            notification_id: easee_shelly_outputs_error
+            title: Easee Shelly indicators were not updated
+            message: >-
+              The configured Shelly output entities were unavailable after
+              waiting 30 seconds. Check the site mapping in configuration.yaml.
 
 # notification on car connect
 - id: easee_mode_choice_on_car_connect
@@ -124,7 +410,7 @@
   mode: restart
   triggers:
     - trigger: state
-      entity_id: sensor.easee_charger_status
+      entity_id: sensor.easee_control_charger_status
       from: "disconnected"
       id: car_connected
     - trigger: homeassistant
@@ -177,7 +463,7 @@
     - delay: "00:00:03"
     - condition: template
       value_template: >-
-        {{ test_mode or states('sensor.easee_charger_status') in connected_statuses }}
+        {{ test_mode or states('sensor.easee_control_charger_status') in connected_statuses }}
     - repeat:
         for_each: "{{ home_notify_services }}"
         sequence:
@@ -224,7 +510,7 @@
             action: "{{ action_solar_only }}"
           id: solar_only
         - trigger: state
-          entity_id: sensor.easee_charger_status
+          entity_id: sensor.easee_control_charger_status
           to: "disconnected"
           id: disconnected
       timeout: "{{ '00:10:00' if test_mode else '24:00:00' }}"
@@ -270,7 +556,7 @@
       value_template: >-
         {{ wait.completed and wait.trigger is not none
            and wait.trigger.id in ['default', 'boost', 'solar_only']
-           and states('sensor.easee_charger_status') in connected_statuses }}
+           and states('sensor.easee_control_charger_status') in connected_statuses }}
     - choose:
         - conditions:
             - condition: template

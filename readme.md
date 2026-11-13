@@ -1,18 +1,22 @@
 # Easee Solar Charging
 
-A Home Assistant + Node-RED solution for smart EV charging with an Easee charging station.
+A Home Assistant configuration for smart EV charging with an Easee charging station. The current Node-RED flow is retained during the staged migration.
 
 ---
 
 ## Overview
 
-The Easee built-in schedule is **disabled**. Node-RED takes full control of when and how fast the car charges. There are three modes selectable from the Home Assistant UI:
+The Easee built-in schedule is **disabled**. The Home Assistant automation directly replaces the Node-RED controller and writes to the charger when the car is connected and required control inputs are valid. Invalid or unavailable inputs produce a persistent notification and no new charger command.
+
+**Cutover safety:** Stop or disable Node-RED's Easee writes before loading/enabling the Home Assistant controller. Never run both controllers against the same charger. Keep `nodered-flow.json` available for rollback; disable the HA controller before re-enabling Node-RED.
+
+There are three modes selectable from the Home Assistant UI:
 
 - **Default**  the permanent mode: follows a configurable weekday/weekend schedule, with automatic solar ramp-up when the house is exporting energy.
 - **Boost**  session-only: charges at maximum speed immediately, regardless of schedule or solar. Resets to Default when the car unplugs.
 - **Solar only**  session-only: follows solar export only, pausing completely when there is nothing to give. Resets to Default when the car unplugs.
 
-Every 10 seconds Node-RED evaluates the current mode and adjusts the Easee dynamic current limit accordingly.
+Every 10 seconds the Home Assistant controller evaluates the current mode and adjusts the Easee dynamic current limit.
 
 Two physical buttons on a Shelly Pro 2 relay provide convenient local control, with LEDs indicating the active mode.
 
@@ -26,7 +30,7 @@ When a car connects to the charger, a Home Assistant automation asks the phones 
 
 This is the normal, always-on behaviour. It combines scheduled charging with opportunistic solar charging:
 
-The Brain tracks **combined P1 + battery power** (net household power) by default. The `USE_MARSTEK_BATTERY` constant can disable battery input; when disabled, battery power is treated as 0 W and control uses P1 alone. Every 10 seconds it calculates whether the house needs to import more, export less, or stay balanced—accounting for both grid flow and battery charge/discharge state when enabled. The charger is adjusted in small 1 A steps to reach a target net power position, preventing oscillation when conditions stabilize.
+The Home Assistant controller tracks **combined P1 + battery power** (net household power) by default. The `use_marstek_battery` constant can disable battery input; when disabled, battery power is treated as 0 W and control uses P1 alone. Every 10 seconds it calculates whether the house needs to import more, export less, or stay balanced—accounting for both grid flow and battery charge/discharge state when enabled. The charger is adjusted in small 1 A steps to reach a target net power position, preventing oscillation when conditions stabilize.
 
 1. **Inside a schedule window** — `input_number.easee_schedule_floor_a` is the shared minimum current for every active schedule block. From there:
    - If combined `netPower` is **below `TARGET_NET_W`** (more surplus than the target), the current ramps **up** toward `input_number.easee_solar_max_a`.
@@ -47,7 +51,7 @@ When the schedule floor is at least `CAR_MIN_A`, it is guaranteed during active 
 
 Sets the dynamic current limit to `input_number.easee_boost_max_a` (recommended starting value 32 A) immediately and keeps it there. The schedule and solar tracking are ignored. When the car unplugs, the mode automatically resets to **Default**.
 
-> Note: because the Easee built-in schedule is disabled, the old "override schedule" button is not used here. Node-RED owns the current limit directly.
+> Note: because the Easee built-in schedule is disabled, the old "override schedule" button is not used here. The Home Assistant automation owns the current limit.
 
 ### Solar only (session-only)
 
@@ -57,12 +61,12 @@ Tracks solar export using `input_number.easee_solar_only_min_a` and `input_numbe
 
 ## Auto-reset on car disconnect
 
-When the Easee charger status changes to a non-connected state (e.g. car unplugged, standby), a state-change trigger in Node-RED fires and:
+When the Easee charger status changes to a non-connected state (e.g. car unplugged, standby), the active controller resets:
 1. Resets `input_select.easee_charging_mode` to **Default**.
 2. Resets `input_number.easee_dynamic_current` to **0 A** (off), ready for the next session.
 3. Sends 0 A to the Easee circuit dynamic limit.
 
-This means pressing **Boost** or **Solar only** is always a "this session" decision  you never have to remember to reset it.
+This means pressing **Boost** or **Solar only** is always a "this session" decision; you never have to remember to reset it.
 
 ---
 
@@ -79,7 +83,7 @@ The buttons send `shelly.click` events to Home Assistant, which trigger automati
 
 ## Mode selection notification
 
-The `automations.yaml` automation triggers when `sensor.easee_charger_status` changes from `disconnected` and then confirms that the car is connected. It finds `device_tracker` entities from the Home Assistant Mobile App integration that are currently `home`, then derives the corresponding `notify.mobile_app_*` targets. Phone IDs are not listed in the automation. The Companion App tracker entity ID must retain the same device suffix as its notification service.
+The `automations.yaml` automation triggers when the internal `sensor.easee_control_charger_status` changes from `disconnected` and then confirms that the car is connected. It finds `device_tracker` entities from the Home Assistant Mobile App integration that are currently `home`, then derives the corresponding `notify.mobile_app_*` targets. Phone IDs are not listed in the automation. The Companion App tracker entity ID must retain the same device suffix as its notification service.
 
 The notification has **Default**, **Boost**, and **Solar only** actions. The first response selects the mode and clears the prompt from the recipients. If the car disconnects or nobody chooses within 24 hours, the current mode is unchanged. Running the automation manually sends a 10-minute test notification and never changes the charging mode.
 
@@ -88,44 +92,22 @@ The notification has **Default**, **Boost**, and **Solar only** actions. The fir
 ## Architecture
 
 ```
-[Every 10s]
+[Every 10s / connected status stable for 10s]
     ↓
-[Tweakable constants]
+[HA automation: validate mode, site mapping, P1 + Marstek, schedule, helpers]
     ↓
-[Get mode]    input_select.easee_charging_mode
-    ↓
-[Car connected?]    sensor.easee_charger_status
-      (not connected → stop)
-    ↓
-[Get P1 power (W)]    sensor.p1_meter_power_import_power (instant reading)
-[Get battery power (W)]    sensor.marstek_power_import (instant reading)
-    ↓
-[Get current setpoint (A)]    input_number.easee_dynamic_current
-    ↓
-[Get schedule state]    schedule.easee_charging_schedule
-[Get amperage settings]    input_number.easee_*
-    ↓
-[Brain — control logic]
-  Combines: netPower = P1 − Battery (P1 alone when disabled)
-  Targets: TARGET_NET_W
-  Limits: ±1A per cycle, ±1A dead-band
-  Hysteresis: CAR_MIN_A on/off threshold
+[Calculate next current]
     ↓
 [easee.set_circuit_dynamic_limit]
     ↓
-[input_number.set_value]  (keep HA helper in sync)
+[input_number.easee_dynamic_current]
 
-
-[Car connected?]    sensor.easee_charger_status (state-change trigger)
-         |
-     (connected)                  (disconnected)
-         |                              |
-[immediate evaluation]      [Reset mode → Default]
-                            [Reset setpoint → 0 A]
-                            [Reset Easee limit → 0 A]
+[Disconnected for 10s]
+    ↓
+[Reset mode → Default, setpoint → 0 A, Easee limit → 0 A]
 ```
 
-The **Brain** function node contains the charging logic. Fixed tweakable constants live in the `Tweakable constants` function node; UI-adjustable amperage settings live in Home Assistant number helpers, and schedule windows live in the Schedule helper.
+Site-specific device IDs and external entity IDs are grouped in the `input_text` mapping in `configuration.yaml`. The HA automation keeps fixed control constants at its start; UI-adjustable amperage settings remain Home Assistant number helpers, and schedule windows remain in the Schedule helper.
 
 ---
 
@@ -133,7 +115,7 @@ The **Brain** function node contains the charging logic. Fixed tweakable constan
 
 ### Weekly schedule
 
-Create one Schedule helper in Home Assistant named **Easee Charging Schedule**. Use its weekly editor to define blocks for each day, including different weekday and weekend times. Its entity ID should be `schedule.easee_charging_schedule`; if you use another ID, update the `Get schedule state` node in Node-RED. The helper uses Home Assistant's configured timezone.
+Create one Schedule helper in Home Assistant named **Easee Charging Schedule**. Use its weekly editor to define blocks for each day, including different weekday and weekend times. Its entity ID should be `schedule.easee_charging_schedule`; keep this ID when moving homes so the HA controller and dashboard need no edits. The helper uses Home Assistant's configured timezone.
 
 ### UI-adjustable amperage settings
 
@@ -141,19 +123,46 @@ The following `input_number` helpers are adjustable in Home Assistant and are sh
 
 | Entity | Range | Recommended starting value |
 |---|---:|---:|
-| `input_number.easee_schedule_floor_a` | 0–32 A | 16 A |
+| `input_number.easee_schedule_floor_a` | 0–32 A | 6 A |
 | `input_number.easee_solar_max_a` | 0–32 A | 32 A |
 | `input_number.easee_boost_max_a` | 0–32 A | 32 A |
 | `input_number.easee_solar_only_min_a` | 0–32 A | 0 A |
 | `input_number.easee_solar_only_max_a` | 0–32 A | 32 A |
 
-`easee_schedule_floor_a` is a shared minimum for all active schedule blocks, not a cap. If it is below `CAR_MIN_A`, the EV-minimum hysteresis applies instead. On the first Node-RED tick, the flow seeds these helpers with the recommended values above and marks `input_boolean.easee_charging_settings_initialized` on. Later UI changes are restored across Home Assistant restarts and are not overwritten.
+`easee_schedule_floor_a` is a shared minimum for all active schedule blocks, not a cap. If it is below `CAR_MIN_A`, the EV-minimum hysteresis applies instead. On first startup, the HA initialization automation seeds these helpers with the recommended values above and marks `input_boolean.easee_charging_settings_initialized` on. Later UI changes are restored across Home Assistant restarts and are not overwritten.
 
 ### Fixed tweakable constants
 
-The `Tweakable constants` function node at the start of the Node-RED flow holds the charger device ID, phase voltage, target net power, maximum current change per cycle, EV minimum current, and `USE_MARSTEK_BATTERY` (a boolean that defaults to `true`). Set it to `false` when there are no Marstek batteries; the Brain then uses 0 W for battery power and bases net power on P1 alone. Edit those constants there rather than in the Brain. The schedule uses Home Assistant's timezone, so no Node-RED timezone constant is needed.
+The HA controller constants are grouped in the `variables` block at the start of `easee_home_assistant_charging_controller` in `automations.yaml`:
 
-**Finding your device ID**: in Home Assistant go to *Settings → Devices & Services → Easee*, open your charger device, and copy the device ID from the URL.
+| Constant | Current value | Purpose |
+|---|---:|---|
+| `phase_voltage_v` | 230 | Converts the P1/Marstek power difference to an ampere adjustment. |
+| `target_net_power_w` | -100 | Desired combined P1-minus-Marstek power. |
+| `max_change_per_cycle_a` | 1 | Limits the change on each 10-second controller run. |
+| `car_minimum_current_a` | 6 | EV start/stop hysteresis threshold. |
+| `use_marstek_battery` | `true` | Set to `false` when no Marstek battery power is available; P1 alone is then used. |
+
+Keep these fixed control constants together. Amperage floors and ceilings remain user-adjustable Home Assistant helpers; site-specific IDs belong in the mapping block in `configuration.yaml`.
+
+**Finding your device ID**: in Home Assistant go to *Settings → Devices & Services → Easee*, open your charger device, and copy the device ID from the URL into `input_text.easee_site_charger_device_id`.
+
+### Central site mapping
+
+Edit only the `input_text` site-mapping block near the start of `configuration.yaml` when adapting the setup to another home. These mapping helpers are created from YAML; no manual helper setup is needed. They hold integration-provided IDs, while template sensors expose stable internal entities so automations and the dashboard do not repeat home-specific entity IDs. The weekly Schedule helper is the only UI-created exception.
+
+| Mapping helper | Value to configure |
+|---|---|
+| `input_text.easee_site_charger_device_id` | Easee device ID used by `easee.set_circuit_dynamic_limit`. |
+| `input_text.easee_site_charger_status_entity` | Source Easee charger-status entity. |
+| `input_text.easee_site_charger_power_entity` | Source Easee charger-power entity; wrapper output is normalized to W. |
+| `input_text.easee_site_charger_session_energy_entity` | Source Easee session-energy entity; wrapper output is normalized to kWh. |
+| `input_text.easee_site_p1_power_entity` | Source P1 instantaneous import/export power entity in W. |
+| `input_text.easee_site_marstek_power_1_entity` / `input_text.easee_site_marstek_power_2_entity` | Power entities for the two Marstek meter plugs, in W. |
+| `input_text.easee_site_shelly_device_id` | Device ID reported by the Shelly `shelly.click` event. |
+| `input_text.easee_site_shelly_output_0_entity` / `_1_entity` | Shelly output switch entities used for the mode LEDs. |
+
+Unavailable or non-numeric power sources make the corresponding internal sensor unavailable. The controller then notifies and skips the charger write instead of assuming missing power is zero.
 
 ---
 
@@ -161,37 +170,33 @@ The `Tweakable constants` function node at the start of the Node-RED flow holds 
 
 | File | Purpose |
 |---|---|
-| `configuration.yaml` | Home Assistant helpers (`input_select`, `input_number`, `input_boolean`) and mode-change scripts. Integrate with your existing configuration. |
-| `automations.yaml` | Shelly button/LED automations and the dynamic Easee mode-selection notification. Copy beside `configuration.yaml`. |
-| `ui.yaml` | Lovelace card definition with mode buttons (checkmark marks the active mode), charger sensors, and editable charging settings. Paste into a manual card. |
-| `nodered-flow.json` | Node-RED flow with the 10-second evaluation cycle and Brain logic. Import via *Menu → Import* in Node-RED. |
+| `configuration.yaml` | Central site-ID/entity mapping, stable template sensors, Home Assistant helpers, and mode scripts. Integrate with your existing configuration. |
+| `automations.yaml` | One-time settings initialization, the 10-second charging controller, disconnect reset, Shelly automations, and mobile mode notification. |
+| `ui.yaml` | Lovelace card with mode buttons, stable internal charger sensors, schedule, and editable charging settings. Paste into a manual card. |
+| `nodered-flow.json` | Previous controller retained only as a rollback reference after direct cutover. |
 
 ---
 
 ## Home Assistant setup
 
-1. Copy `automations.yaml` beside your Home Assistant `configuration.yaml`, then integrate the contents of this repository's `configuration.yaml`. It includes `automations.yaml`. Before restarting, consolidate the top-level `script:` section: the file has both a `scripts.yaml` include and inline mode scripts, so keep one root key and merge those scripts.
-2. Restart Home Assistant.
-3. In **Settings → Devices & Services → Helpers**, create an **Easee Charging Schedule** helper and configure its weekday/weekend blocks.
+1. Copy `automations.yaml` beside your Home Assistant `configuration.yaml`, then integrate this repository's configuration. Update the YAML-defined `input_text` site-mapping values for the Easee device ID, source entities, and Shelly ID/entities.
+2. Keep the mode scripts in `configuration.yaml` as the only top-level `script:` section; do not restore the old, missing `scripts.yaml` include or add a duplicate `script:` key.
+3. In **Settings → Devices & Services → Helpers**, create the **Easee Charging Schedule** helper with entity ID `schedule.easee_charging_schedule` and configure weekday/weekend blocks.
 4. Ensure each phone runs the Home Assistant Companion App and has a Mobile App `device_tracker` that reports `home`; the automation discovers these devices automatically.
-5. The first Node-RED tick seeds the five amperage helpers with the recommended starting values from the table. Adjust them from the dashboard afterwards if needed.
-6. Add the card in `ui.yaml` to a Lovelace dashboard (Edit dashboard → Add card → Manual → paste YAML).
-7. **Disable the Easee schedule** in the Easee app (or set it to always allow charging; Node-RED manages limits directly via the dynamic current limit API).
+5. Before reloading Home Assistant or enabling the new automations, stop/disable Node-RED's Easee writes. This is a direct replacement; do not run both writers together.
+6. Restart Home Assistant, confirm configuration validation succeeds, and check the persistent notifications and automation traces. The HA initialization automation seeds the five amperage helpers once; later user changes are preserved.
+7. Add the card in `ui.yaml` to a Lovelace dashboard (Edit dashboard → Add card → Manual → paste YAML).
+8. **Disable the Easee schedule** in the Easee app (or set it to always allow charging; the HA automation manages limits through the dynamic current limit API).
 
-## Node-RED setup
+## Node-RED rollback reference
 
-1. Make sure **node-red-contrib-home-assistant-websocket** is installed in Node-RED.
-2. Import `nodered-flow.json` via *Menu  Import*.
-3. Open the **Home Assistant** server node and point it at your HA instance if needed.
-4. Deploy.
-5. Open the `Tweakable constants` function node to edit its fixed constants if needed. Adjust the amperage settings in Home Assistant.
-6. Deploy again.
+Keep `nodered-flow.json` available until the HA controller is accepted. If rolling back, first disable the HA charging-controller and disconnect-reset automations, then re-enable Node-RED. Never leave both controllers writing to Easee.
 
 ---
 
 ## How solar + battery control works
 
-The algorithm runs every 10 seconds and reads P1 power (grid), the Marstek battery power sensor, the Home Assistant setpoint helper, schedule state, and amperage settings. `USE_MARSTEK_BATTERY` defaults to `true`; if set to `false` in the `Tweakable constants` node, the Brain uses 0 W for battery power instead. Its combined-power calculation is:
+The HA controller runs every 10 seconds and reads P1 power (grid), the Marstek battery power sensor, the Home Assistant setpoint helper, schedule state, and amperage settings. `use_marstek_battery` defaults to `true` in the controller constants; if set to `false`, the controller uses 0 W for battery power instead. Its combined-power calculation is:
 
 ### P1 Power (grid)
 - **Positive** = the house is importing from the grid
@@ -212,7 +217,7 @@ This interpretation means:
 
 ### Adjustment Logic
 
-Every 10 seconds, the Brain uses the **setpoint helper** (`input_number.easee_dynamic_current`)—what we commanded last cycle—together with the latest P1 and Marstek readings.
+Every 10 seconds, the controller uses the **setpoint helper** (`input_number.easee_dynamic_current`)—what we commanded last cycle—together with the latest P1 and Marstek readings.
 
 It calculates the ideal adjustment:
 
@@ -241,7 +246,7 @@ The **1 A dead-band** prevents oscillation when the house is close to target. Br
 
 Outside schedule windows (floor = 0 A), the car's physical minimum charging current creates a step function: it either draws ≥ `CAR_MIN_A` × `PHASE_VOLTAGE` or nothing. The algorithm uses the household power readings and the last commanded setpoint to handle this minimum and avoid repeatedly starting and stopping the charger.
 
-The setpoint is stored in `input_number.easee_dynamic_current` so the UI shows the live target and the value survives a Node-RED restart.
+The setpoint is stored in `input_number.easee_dynamic_current` so the UI shows the live target and the value survives a Home Assistant restart.
 
 **Default mode** uses `input_number.easee_schedule_floor_a` as its floor during active schedule blocks. Outside blocks the floor is 0 A, so the car only charges if there is sufficient combined surplus.
 

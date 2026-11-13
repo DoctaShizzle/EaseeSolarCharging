@@ -1,39 +1,102 @@
-# Loads default set of integrations. Do not remove.
-default_config:
+# =========================
+# Templates for Easee charging
+# =========================
 
-logger:
-  default: warning
-  logs:
-    custom_components.marstek_cloud: debug
-    custom_components.renson_test: debug
-    custom_components.marstek_local_api: debug
+# Site mapping: update these source IDs once during installation.
+input_text:
+  easee_site_charger_device_id:
+    name: Easee Site Charger Device ID
+    max: 32
+    initial: b6930861fd4fcd8ce162a7643da311f5
+  easee_site_charger_status_entity:
+    name: Easee Site Charger Status Entity
+    max: 100
+    initial: sensor.easee_charger_status
+  easee_site_charger_power_entity:
+    name: Easee Site Charger Power Entity
+    max: 100
+    initial: sensor.easee_charger_power
+  easee_site_charger_session_energy_entity:
+    name: Easee Site Charger Session Energy Entity
+    max: 100
+    initial: sensor.easee_charger_session_energy
+  easee_site_p1_power_entity:
+    name: Easee Site P1 Power Entity
+    max: 100
+    initial: sensor.p1_meter_power_import_power
+  easee_site_marstek_power_1_entity:
+    name: Easee Site Marstek Power 1 Entity
+    max: 100
+    initial: sensor.plug_1_power
+  easee_site_marstek_power_2_entity:
+    name: Easee Site Marstek Power 2 Entity
+    max: 100
+    initial: sensor.plug_2_power
+  easee_site_shelly_device_id:
+    name: Easee Site Shelly Device ID
+    max: 64
+    initial: shellypro2-ec62609eaa2c
+  easee_site_shelly_output_0_entity:
+    name: Easee Site Shelly Output 0 Entity
+    max: 100
+    initial: switch.shellypro2_ec62609eaa2c_output_0
+  easee_site_shelly_output_1_entity:
+    name: Easee Site Shelly Output 1 Entity
+    max: 100
+    initial: switch.shellypro2_ec62609eaa2c_output_1
 
-# Text to speech
-tts:
-  - platform: google_translate
-
-automation: !include automations.yaml
-script: !include scripts.yaml
-scene: !include scenes.yaml
-
-http:
-  use_x_forwarded_for: true
-  trusted_proxies:
-    - 172.18.0.2      # my swag container
-    - 192.168.0.1     # if my router is seen as the source
-
-google_assistant:
-  project_id: home-assistant-dc320
-  service_account: !include SERVICE_ACCOUNT.json
-  report_state: true
-
+# Stable internal entities wrap source IDs from the site mapping above. Numeric wrappers
+# become unavailable when their source is missing or invalid so the controller will not
+# silently treat missing power data as zero.
 template:
   - sensor:
-        
-        # =========================
-        # Sensors for Easee charging
-        # =========================
-        
+      # Stable internal entities keep home-specific integration IDs out of automations and dashboards.
+      - name: Easee Control Charger Status
+        unique_id: easee_control_charger_status
+        availability: >
+          {% set source = states('input_text.easee_site_charger_status_entity') %}
+          {{ source not in ['', 'unknown', 'unavailable'] and states(source) not in ['unknown', 'unavailable'] }}
+        state: "{{ states(states('input_text.easee_site_charger_status_entity')) }}"
+
+      # Normalize source power to W and session energy to kWh for consistent dashboard display.
+      - name: Easee Control Charger Power
+        unique_id: easee_control_charger_power
+        device_class: power
+        state_class: measurement
+        unit_of_measurement: W
+        availability: >
+          {% set source = states('input_text.easee_site_charger_power_entity') %}
+          {% set unit = state_attr(source, 'unit_of_measurement') %}
+          {{ is_number(states(source)) and unit in ['W', 'kW'] }}
+        state: >
+          {% set source = states('input_text.easee_site_charger_power_entity') %}
+          {% set value = states(source) | float %}
+          {% set unit = state_attr(source, 'unit_of_measurement') %}
+          {{ value * 1000 if unit == 'kW' else value }}
+
+      - name: Easee Control Charger Session Energy
+        unique_id: easee_control_charger_session_energy
+        unit_of_measurement: kWh
+        availability: >
+          {% set source = states('input_text.easee_site_charger_session_energy_entity') %}
+          {% set unit = state_attr(source, 'unit_of_measurement') %}
+          {{ is_number(states(source)) and unit in ['Wh', 'kWh'] }}
+        state: >
+          {% set source = states('input_text.easee_site_charger_session_energy_entity') %}
+          {% set value = states(source) | float %}
+          {% set unit = state_attr(source, 'unit_of_measurement') %}
+          {{ value / 1000 if unit == 'Wh' else value }}
+
+      - name: Easee Control P1 Power
+        unique_id: easee_control_p1_power
+        device_class: power
+        state_class: measurement
+        unit_of_measurement: W
+        availability: >
+          {% set source = states('input_text.easee_site_p1_power_entity') %}
+          {{ is_number(states(source)) }}
+        state: "{{ states(states('input_text.easee_site_p1_power_entity')) | float }}"
+
       - name: Easee Charging Mode Readonly
         state: "{{ states('input_select.easee_charging_mode') }}"
         icon: mdi:ev-station
@@ -43,23 +106,28 @@ template:
         unit_of_measurement: "A"
         icon: mdi:current-ac
         
-        # =========================
-        # Sensors for Marstek Batteries
-        # =========================
-        
       - name: marstek_power_import
         unique_id: sensor.marstek_power_import
+        availability: >
+          {% set power1_entity = states('input_text.easee_site_marstek_power_1_entity') %}
+          {% set power2_entity = states('input_text.easee_site_marstek_power_2_entity') %}
+          {{ is_number(states(power1_entity)) and is_number(states(power2_entity)) }}
         state: >
-          {% set power1 = states('sensor.plug_1_power') | float(0) %}
-          {% set power2 = states('sensor.plug_2_power') | float(0) %}
+          {% set power1_entity = states('input_text.easee_site_marstek_power_1_entity') %}
+          {% set power2_entity = states('input_text.easee_site_marstek_power_2_entity') %}
+          {% set power1 = states(power1_entity) | float %}
+          {% set power2 = states(power2_entity) | float %}
           {{ (power1 + power2) }}
         unit_of_measurement: W
+        device_class: power
+        state_class: measurement
         icon: mdi:battery-charging-60
 
 # =========================
 # Helpers for Easee charging
 # =========================
 input_number:
+  # Live commanded current. The controller updates this after a successful Easee service call.
   easee_dynamic_current:
     name: Easee Dynamic Current
     min: 0
@@ -68,7 +136,7 @@ input_number:
     initial: 6
     unit_of_measurement: A
     icon: mdi:current-ac
-    
+
   # These settings are user-adjustable; omit initial so Home Assistant restores their last values.
   easee_schedule_floor_a:
     name: Easee Schedule Floor
@@ -107,11 +175,13 @@ input_number:
     icon: mdi:current-ac
 
 input_boolean:
+  # The controller sets this after seeding the five adjustable amperage helpers once.
   easee_charging_settings_initialized:
     name: Easee Charging Settings Initialized
     icon: mdi:check-circle-outline
 
 input_select:
+  # Keep these option strings in sync with mode comparisons in automations.yaml and the Lovelace card.
   easee_charging_mode:
     name: Easee Charging Mode
     options:
@@ -124,7 +194,7 @@ input_select:
 # Scripts for Easee charging
 # =========================
 
-# Scripts for Easee Charging modes
+# Mode scripts are called by the Lovelace card, Shelly buttons, and mobile notification.
 
 script:
   easee_mode_default:

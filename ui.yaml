@@ -1,3 +1,4 @@
+# Manual Lovelace card for the stable entities and helpers defined in configuration.yaml.
 type: vertical-stack
 cards:
   - type: vertical-stack
@@ -98,11 +99,11 @@ cards:
         title: Easee Charging Station
         show_header_toggle: false
         entities:
-          - entity: sensor.easee_charger_power
+          - entity: sensor.easee_control_charger_power
             name: Power
-          - entity: sensor.easee_charger_session_energy
+          - entity: sensor.easee_control_charger_session_energy
             name: Session Energy
-          - entity: sensor.easee_charger_status
+          - entity: sensor.easee_control_charger_status
             name: Charger Status
           - entity: sensor.easee_charging_mode_readonly
             name: Mode
@@ -113,7 +114,7 @@ cards:
         hours_to_show: 6
         refresh_interval: 30
         entities:
-          - entity: sensor.easee_charger_power
+          - entity: sensor.easee_control_charger_power
             name: Charger Power
           - entity: sensor.easee_dynamic_current_readonly
             name: Dynamic Current
