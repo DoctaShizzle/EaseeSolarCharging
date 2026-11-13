@@ -155,8 +155,8 @@ Edit only the `input_text` site-mapping block near the start of `configuration.y
 |---|---|
 | `input_text.easee_site_charger_device_id` | Easee device ID used by `easee.set_circuit_dynamic_limit`. |
 | `input_text.easee_site_charger_status_entity` | Source Easee charger-status entity. |
-| `input_text.easee_site_charger_power_entity` | Source Easee charger-power entity; wrapper output is normalized to W. |
-| `input_text.easee_site_charger_session_energy_entity` | Source Easee session-energy entity; wrapper output is normalized to kWh. |
+| `input_text.easee_site_charger_power_entity` | Source Easee charger-power entity; wrapper normalizes to kW and displays two decimal places (for example, 1.373 kW as 1.37 kW). |
+| `input_text.easee_site_charger_session_energy_entity` | Source Easee session-energy entity; wrapper normalizes to kWh and displays one decimal place without rounding its underlying state. |
 | `input_text.easee_site_p1_power_entity` | Source P1 instantaneous import/export power entity in W. |
 | `input_text.easee_site_marstek_power_1_entity` / `input_text.easee_site_marstek_power_2_entity` | Power entities for the two Marstek meter plugs, in W. |
 | `input_text.easee_site_shelly_device_id` | Device ID reported by the Shelly `shelly.click` event. |
