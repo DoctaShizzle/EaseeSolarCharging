@@ -68,6 +68,48 @@ input_number:
     initial: 6
     unit_of_measurement: A
     icon: mdi:current-ac
+    
+  # These settings are user-adjustable; omit initial so Home Assistant restores their last values.
+  easee_schedule_floor_a:
+    name: Easee Schedule Floor
+    min: 0
+    max: 32
+    step: 1
+    unit_of_measurement: A
+    icon: mdi:current-ac
+  easee_solar_max_a:
+    name: Easee Solar Maximum
+    min: 0
+    max: 32
+    step: 1
+    unit_of_measurement: A
+    icon: mdi:current-ac
+  easee_boost_max_a:
+    name: Easee Boost Maximum
+    min: 0
+    max: 32
+    step: 1
+    unit_of_measurement: A
+    icon: mdi:current-ac
+  easee_solar_only_min_a:
+    name: Easee Solar Only Minimum
+    min: 0
+    max: 32
+    step: 1
+    unit_of_measurement: A
+    icon: mdi:current-ac
+  easee_solar_only_max_a:
+    name: Easee Solar Only Maximum
+    min: 0
+    max: 32
+    step: 1
+    unit_of_measurement: A
+    icon: mdi:current-ac
+
+input_boolean:
+  easee_charging_settings_initialized:
+    name: Easee Charging Settings Initialized
+    icon: mdi:check-circle-outline
 
 input_select:
   easee_charging_mode:
