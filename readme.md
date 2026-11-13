@@ -16,6 +16,8 @@ Every 10 seconds Node-RED evaluates the current mode and adjusts the Easee dynam
 
 Two physical buttons on a Shelly Pro 2 relay provide convenient local control, with LEDs indicating the active mode.
 
+When a car connects to the charger, a Home Assistant automation asks the phones currently at home to choose a mode. The first choice applies; if nobody responds, the current mode is left unchanged.
+
 ---
 
 ## Modes
@@ -74,6 +76,12 @@ A [Shelly Pro 2](https://shelly.cloud/products/shelly-pro-2/) relay provides phy
 - **LED 1 (Output 1)**: Lights up when mode is **Boost**. Both LEDs are off in **Default** mode.
 
 The buttons send `shelly.click` events to Home Assistant, which trigger automations that change the mode accordingly. A separate automation keeps the Shelly outputs (LEDs) in sync with the selected mode at all times, including on Home Assistant startup.
+
+## Mode selection notification
+
+The `automations.yaml` automation triggers when `sensor.easee_charger_status` changes from `disconnected` and then confirms that the car is connected. It finds `device_tracker` entities from the Home Assistant Mobile App integration that are currently `home`, then derives the corresponding `notify.mobile_app_*` targets. Phone IDs are not listed in the automation. The Companion App tracker entity ID must retain the same device suffix as its notification service.
+
+The notification has **Default**, **Boost**, and **Solar only** actions. The first response selects the mode and clears the prompt from the recipients. If the car disconnects or nobody chooses within 24 hours, the current mode is unchanged. Running the automation manually sends a 10-minute test notification and never changes the charging mode.
 
 ---
 
@@ -153,7 +161,8 @@ The `Tweakable constants` function node at the start of the Node-RED flow holds 
 
 | File | Purpose |
 |---|---|
-| `configuration.yaml` | Home Assistant helpers (`input_select`, `input_number`, `input_boolean`), mode-change scripts, Shelly button event automations, and LED sync logic. Merge into your `configuration.yaml`, consolidating root sections as needed. |
+| `configuration.yaml` | Home Assistant helpers (`input_select`, `input_number`, `input_boolean`) and mode-change scripts. Integrate with your existing configuration. |
+| `automations.yaml` | Shelly button/LED automations and the dynamic Easee mode-selection notification. Copy beside `configuration.yaml`. |
 | `ui.yaml` | Lovelace card definition with mode buttons (checkmark marks the active mode), charger sensors, and editable charging settings. Paste into a manual card. |
 | `nodered-flow.json` | Node-RED flow with the 10-second evaluation cycle and Brain logic. Import via *Menu → Import* in Node-RED. |
 
@@ -161,12 +170,13 @@ The `Tweakable constants` function node at the start of the Node-RED flow holds 
 
 ## Home Assistant setup
 
-1. Integrate the contents of `configuration.yaml` into your Home Assistant configuration. Before restarting, consolidate the top-level `script:` and `automation:` sections: this file has include directives and inline definitions for both, so do not leave duplicate root keys.
+1. Copy `automations.yaml` beside your Home Assistant `configuration.yaml`, then integrate the contents of this repository's `configuration.yaml`. It includes `automations.yaml`. Before restarting, consolidate the top-level `script:` section: the file has both a `scripts.yaml` include and inline mode scripts, so keep one root key and merge those scripts.
 2. Restart Home Assistant.
 3. In **Settings → Devices & Services → Helpers**, create an **Easee Charging Schedule** helper and configure its weekday/weekend blocks.
-4. The first Node-RED tick seeds the five amperage helpers with the recommended starting values from the table. Adjust them from the dashboard afterwards if needed.
-5. Add the card in `ui.yaml` to a Lovelace dashboard (Edit dashboard → Add card → Manual → paste YAML).
-6. **Disable the Easee schedule** in the Easee app (or set it to always allow charging; Node-RED manages limits directly via the dynamic current limit API).
+4. Ensure each phone runs the Home Assistant Companion App and has a Mobile App `device_tracker` that reports `home`; the automation discovers these devices automatically.
+5. The first Node-RED tick seeds the five amperage helpers with the recommended starting values from the table. Adjust them from the dashboard afterwards if needed.
+6. Add the card in `ui.yaml` to a Lovelace dashboard (Edit dashboard → Add card → Manual → paste YAML).
+7. **Disable the Easee schedule** in the Easee app (or set it to always allow charging; Node-RED manages limits directly via the dynamic current limit API).
 
 ## Node-RED setup
 
