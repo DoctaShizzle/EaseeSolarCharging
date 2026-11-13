@@ -180,13 +180,12 @@ Unavailable or non-numeric power sources make the corresponding internal sensor 
 ## Home Assistant setup
 
 1. Copy `automations.yaml` beside your Home Assistant `configuration.yaml`, then integrate this repository's configuration. Update the YAML-defined `input_text` site-mapping values for the Easee device ID, source entities, and Shelly ID/entities.
-2. Keep the mode scripts in `configuration.yaml` as the only top-level `script:` section; do not restore the old, missing `scripts.yaml` include or add a duplicate `script:` key.
-3. In **Settings → Devices & Services → Helpers**, create the **Easee Charging Schedule** helper with entity ID `schedule.easee_charging_schedule` and configure weekday/weekend blocks.
-4. Ensure each phone runs the Home Assistant Companion App and has a Mobile App `device_tracker` that reports `home`; the automation discovers these devices automatically.
-5. Before reloading Home Assistant or enabling the new automations, stop/disable Node-RED's Easee writes. This is a direct replacement; do not run both writers together.
-6. Restart Home Assistant, confirm configuration validation succeeds, and check the persistent notifications and automation traces. The HA initialization automation seeds the five amperage helpers once; later user changes are preserved.
-7. Add the card in `ui.yaml` to a Lovelace dashboard (Edit dashboard → Add card → Manual → paste YAML).
-8. **Disable the Easee schedule** in the Easee app (or set it to always allow charging; the HA automation manages limits through the dynamic current limit API).
+2. In **Settings → Devices & Services → Helpers**, create the **Easee Charging Schedule** helper with entity ID `schedule.easee_charging_schedule` and configure weekday/weekend blocks.
+3. Ensure each phone runs the Home Assistant Companion App and has a Mobile App `device_tracker` that reports `home`; the automation discovers these devices automatically.
+4. Before reloading Home Assistant or enabling the new automations, stop/disable Node-RED's Easee writes. This is a direct replacement; do not run both writers together.
+5. Restart Home Assistant, confirm configuration validation succeeds, and check the persistent notifications and automation traces. The HA initialization automation seeds the five amperage helpers once; later user changes are preserved.
+6. Add the card in `ui.yaml` to a Lovelace dashboard (Edit dashboard → Add card → Manual → paste YAML).
+7. **Disable the Easee schedule** in the Easee app (or set it to always allow charging; the HA automation manages limits through the dynamic current limit API).
 
 ## Node-RED rollback reference
 
