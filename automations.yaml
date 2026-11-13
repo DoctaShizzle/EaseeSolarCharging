@@ -1,4 +1,6 @@
-# charging automations
+# =========================
+# Automations for Easee Charging
+# =========================
 
 # Fixed controller constants. Update the site-specific entity IDs and device IDs
 # only in the input_text mapping in configuration.yaml when installing.
