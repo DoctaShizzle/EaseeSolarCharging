@@ -26,16 +26,16 @@ This is the normal, always-on behaviour. It combines scheduled charging with opp
 
 The Brain tracks **combined P1 + battery power** (net household power). Every 10 seconds it calculates whether the house needs to import more, export less, or stay balanced—accounting for both grid flow and battery charge/discharge state. The charger is adjusted in small 1 A steps to reach a target net power position, preventing oscillation when conditions stabilize.
 
-1. **Inside a schedule window** — the current floors at the slot's configured `maxA`. From there:
-   - If the house is **exporting surplus** (P1 negative **and** batteries are helping), the current ramps **up** toward `input_number.easee_solar_max_a`.
-   - If the house is **importing too much** (P1 positive **or** batteries are draining), the current ramps **down** toward the floor.
+1. **Inside a schedule window** — `input_number.easee_schedule_floor_a` is the shared minimum current for every active schedule block. From there:
+   - If combined `netPower` is **below `TARGET_NET_W`** (more surplus than the target), the current ramps **up** toward `input_number.easee_solar_max_a`.
+   - If combined `netPower` is **above `TARGET_NET_W`** (more import or less export than the target), the current ramps **down** toward the schedule floor.
    - Small adjustments (< 1 A) are ignored to prevent jitter — only moves of ≥1 A are applied, allowing transient spikes to settle.
 
 2. **Outside every schedule window** — the floor drops to 0 A, but the solar+battery tracking still runs with **EV-minimum hysteresis** (`CAR_MIN_A`, default 6 A):
    - The car either charges at ≥ `CAR_MIN_A` or not at all — values 1–5 A are never commanded (the car ignores them anyway).
    - **OFF → ON**: only when surplus can sustain `CAR_MIN_A` (i.e. `idealDeltaA ≥ CAR_MIN_A`, meaning ≥ 1380 W of net export beyond target).
    - **ON → OFF**: only when the unclamped ideal target drops to 0 or below (real sustained deficit).
-   - Between those thresholds the charger **holds** at its current level — no oscillation.
+   - Between those thresholds the charging state is retained; while charging, the setpoint can still ramp toward the target by up to `MAX_CHANGE_PER_CYCLE` per cycle. This avoids rapid start/stop cycling.
 
 The active windows come from one Home Assistant Schedule helper, `schedule.easee_charging_schedule`. It supports different time blocks for each weekday, so a single helper covers both weekday and weekend schedules. The shared `input_number.easee_schedule_floor_a` value is the minimum current for every active block.
 
@@ -49,7 +49,7 @@ Sets the dynamic current limit to `input_number.easee_boost_max_a` (recommended 
 
 ### Solar only (session-only)
 
-Tracks solar export using `input_number.easee_solar_only_min_a` and `input_number.easee_solar_only_max_a`. With the recommended 0 A minimum, the car pauses when there is no solar and resumes automatically as soon as the house starts exporting again. When the car unplugs, the mode automatically resets to **Default**.
+Tracks solar export using `input_number.easee_solar_only_min_a` and `input_number.easee_solar_only_max_a`. With the recommended 0 A minimum, the car pauses when surplus cannot sustain the EV minimum. It resumes only when combined net power reaches the start threshold, `TARGET_NET_W - (CAR_MIN_A × PHASE_VOLTAGE)`. With the current defaults, that is `-1,480 W`, not merely any grid export. When the car unplugs, the mode automatically resets to **Default**.
 
 ---
 
@@ -153,15 +153,15 @@ The `Tweakable constants` function node at the start of the Node-RED flow holds 
 
 | File | Purpose |
 |---|---|
-| `configuration.yaml` | Home Assistant helpers (`input_select`, `input_number`), mode-change scripts, Shelly button event automations, and LED sync logic. Merge into your `configuration.yaml`. |
-| `ui.yaml` | Lovelace card definition with mode buttons, charger sensors, and editable charging settings. Paste into a manual card. |
+| `configuration.yaml` | Home Assistant helpers (`input_select`, `input_number`, `input_boolean`), mode-change scripts, Shelly button event automations, and LED sync logic. Merge into your `configuration.yaml`, consolidating root sections as needed. |
+| `ui.yaml` | Lovelace card definition with mode buttons (checkmark marks the active mode), charger sensors, and editable charging settings. Paste into a manual card. |
 | `nodered-flow.json` | Node-RED flow with the 10-second evaluation cycle and Brain logic. Import via *Menu → Import* in Node-RED. |
 
 ---
 
 ## Home Assistant setup
 
-1. Merge the contents of `configuration.yaml` into your Home Assistant `configuration.yaml`.
+1. Integrate the contents of `configuration.yaml` into your Home Assistant configuration. Before restarting, consolidate the top-level `script:` and `automation:` sections: this file has include directives and inline definitions for both, so do not leave duplicate root keys.
 2. Restart Home Assistant.
 3. In **Settings → Devices & Services → Helpers**, create an **Easee Charging Schedule** helper and configure its weekday/weekend blocks.
 4. The first Node-RED tick seeds the five amperage helpers with the recommended starting values from the table. Adjust them from the dashboard afterwards if needed.
