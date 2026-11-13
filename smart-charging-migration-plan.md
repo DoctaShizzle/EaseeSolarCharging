@@ -185,7 +185,9 @@ The first adapter uses the existing ENGIE peak/off-peak/super-off-peak import an
 
 ## Phased implementation plan
 
-### Step 1 - Rewrite the existing logic in Home Assistant and remove the Node-RED dependency
+### Step 1 - Rewrite the existing logic in Home Assistant and remove the Node-RED dependency (Complete)
+
+**Status:** Complete per user acceptance on 2026-11-13. Any additional issues found will be handled as follow-up bug fixes.
 
 This is the first implementation step. Do not add tariff optimization or solar forecasting before it passes its exit criteria.
 
@@ -316,10 +318,11 @@ Use Home Assistant configuration validation and observe the direct controller af
 
 ## Current design state
 
-The Home Assistant direct controller, centralized site mapping, and migration documentation are in place. YAML syntax/duplicate-key checks and a local nine-case current-calculation comparison against the Node-RED function pass; these do not replace Home Assistant configuration validation or live charger testing. Step 1 remains in progress until the direct cutover, representative behavior, and rollback sequence are verified on the Home Assistant instance. Smart scheduling, tariff adapters, direct Open-Meteo forecasting, and the session UI remain planned work. The supplied vehicle/PV characteristics and the no-history/no-overview constraints are recorded above; PV DC capacity, tariff period boundaries, usable battery capacities, and effective per-car AC limits remain open.
+Step 1 is complete per user acceptance on 2026-11-13. YAML syntax/duplicate-key checks and a local nine-case current-calculation comparison against the Node-RED function were performed in this repository session; no Home Assistant runtime configuration check was run here. Any further issues observed by the user will be handled as follow-up fixes. Smart scheduling, tariff adapters, direct Open-Meteo forecasting, and the session UI remain planned work. The supplied vehicle/PV characteristics and the no-history/no-overview constraints are recorded above; PV DC capacity, tariff period boundaries, usable battery capacities, and effective per-car AC limits remain open.
 
 ## Revisions
 
 - 2026-11-13 - Initial plan created from the agreed migration order, mode semantics, provider separation, slot/live-control split, and YAML-first preference.
 - 2026-11-13 - Updated from user feedback: direct Open-Meteo API attempt, supplied vehicle and PV details, ENGIE rate-period constants, manual dashboard session flow, no historical estimates or user-facing overviews, and Smart-mode scheduled fallback.
 - 2026-11-13 - Removed the Step 1 HA shadow-controller approach per user preference; require stopping Node-RED before direct HA cutover, while keeping planner-output validation separate from live Easee writes.
+- 2026-11-13 - Marked Step 1 complete per user acceptance; future observed defects will be handled as follow-up fixes.
